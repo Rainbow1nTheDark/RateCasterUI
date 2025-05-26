@@ -18,7 +18,6 @@ import { RateCaster } from './RateCasterSDK/src'; // SDK for write operations
 import { getSocket } from './socket'; // Singleton socket
 
 const API_BASE_URL = 'http://localhost:3001/api';
-const SOCKET_URL = 'http://localhost:3001';
 
 // Environment variables for SDK (RPC URLs for wallet interactions, not for data fetching)
 const FRONTEND_RPC_URL = 'https://polygon-rpc.com'; // Used if SDK needs a provider for read-only ops not tied to signer
@@ -185,27 +184,36 @@ const App: React.FC = () => {
             }
         };
 
-        const handleNewReviewEvent = (reviewFromSocket: DappReview) => {
-            logger.info('Socket.IO: New review event received:', reviewFromSocket);
-            setNewReviewNotification(reviewFromSocket);
-            setAllReviews(prev => [reviewFromSocket, ...prev.filter(r => r.id !== reviewFromSocket.id)].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
-            setDapps(prevDapps =>
-                prevDapps.map(d => {
-                    if (d.dappId === reviewFromSocket.dappId) {
-                        const currentReviewsForDapp = [reviewFromSocket, ...allReviews.filter(r => r.dappId === d.dappId && r.id !== reviewFromSocket.id)];
-                        const newTotalReviews = currentReviewsForDapp.length;
-                        const newAverageRating = newTotalReviews > 0
-                            ? currentReviewsForDapp.reduce((sum, r) => sum + r.starRating, 0) / newTotalReviews
-                            : 0;
-                        return { ...d, totalReviews: newTotalReviews, averageRating: newAverageRating };
-                    }
-                    return d;
-                })
-            );
-            if (userAddress && reviewFromSocket.rater.toLowerCase() === userAddress.toLowerCase()) {
-                setUserReviews(prev => [reviewFromSocket, ...prev.filter(r => r.id !== reviewFromSocket.id)].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
-            }
-        };
+       const handleNewReviewEvent = async (reviewFromSocket: DappReview) => {
+          logger.info('Socket.IO: New review event received:', reviewFromSocket);
+          setNewReviewNotification(reviewFromSocket);
+
+          // Update allReviews
+          setAllReviews(prev => [
+              reviewFromSocket,
+              ...prev.filter(r => r.id !== reviewFromSocket.id)
+          ].sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0)));
+
+          // Update userReviews if the review is from the current user
+          if (userAddress && reviewFromSocket.rater.toLowerCase() === userAddress.toLowerCase()) {
+              setUserReviews(prev => [
+                  reviewFromSocket,
+                  ...prev.filter(r => r.id !== reviewFromSocket.id)
+              ].sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0)));
+          }
+
+          // Fetch updated dapps from backend to get correct aggregates
+          try {
+              const dappsResponse = await fetch(`${API_BASE_URL}/dapps`);
+              if (!dappsResponse.ok) throw new Error(`Failed to fetch dApps: ${dappsResponse.statusText}`);
+              const dappsData: DappRegistered[] = await dappsResponse.json();
+              setDapps(dappsData);
+              logger.debug('Fetched updated dApps with new aggregates:', dappsData);
+          } catch (err: any) {
+              logger.error('Failed to fetch updated dApps:', err.message);
+              setError(prev => `${prev ? prev + '; ' : ''}Failed to update dApp data: ${err.message}`);
+          }
+      };
 
         const handleDappUpdateEvent = (updatedDappFromSocket: DappRegistered) => {
             logger.info('Socket.IO: DApp update event received:', updatedDappFromSocket);
