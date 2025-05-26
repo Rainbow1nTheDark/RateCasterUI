@@ -1,0 +1,5 @@
+{
+  "name": "RateCaster Frontend",
+  "description": "A web application to browse, rate, and review decentralized applications (dApps). It interacts with a backend service that caches and serves dApp data and reviews.",
+  "requestFramePermissions": []
+}

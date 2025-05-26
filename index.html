@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RateCaster dApp Reviews</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Roboto', sans-serif;
+        background-color: #1A1A1A; /* Equivalent to bg-neutral-900 or similar */
+        color: #E0E0E0; /* Equivalent to text-neutral-200 or similar */
+      }
+      /* Custom scrollbar for webkit browsers */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #2a2a2a; /* Darker track */
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #4a4a4a; /* Lighter thumb */
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #D4A017; /* Accent color on hover */
+      }
+      /* Spinner animation */
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      .animate-spin-custom {
+        animation: spin 1s linear infinite;
+      }
+       /* Notification animation */
+      @keyframes slideInDown { /* Changed from slideInUp */
+        0% { transform: translateY(-100%); opacity: 0; }
+        100% { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes slideOutUp { /* Changed from slideOutDown */
+        0% { transform: translateY(0); opacity: 1; }
+        100% { transform: translateY(-100%); opacity: 0; }
+      }
+      .animate-slide-in-down { /* Changed from animate-slide-in-up */
+        animation: slideInDown 0.5s ease-out forwards;
+      }
+      .animate-slide-out-up { /* Changed from animate-slide-out-down */
+        animation: slideOutUp 0.5s ease-in forwards;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.1.0",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "ethers": "https://esm.sh/ethers@^6.14.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "process": "https://esm.sh/process@^0.11.10",
+    "socket.io-client": "https://esm.sh/socket.io-client@^4.7.5",
+    "@Ratecaster": "./RateCasterSDK.js",
+    "path": "https://esm.sh/path-browserify@^1.0.1",
+    "dotenv": "https://esm.sh/dotenv@^16.5.0",
+    "http": "https://esm.sh/http@^0.0.1-security",
+    "fs/": "https://esm.sh/fs@^0.0.1-security/",
+    "jest": "https://esm.sh/jest@^29.7.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html><link rel="stylesheet" href="index.css">
+<script src="index.tsx" type="module"></script>
