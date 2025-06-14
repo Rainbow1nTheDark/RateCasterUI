@@ -12,5 +12,12 @@
     "reviewStreak": 0,
     "lastLoginTimestamp": 1749418166589,
     "lastReviewTimestamp": 0
+  },
+  "0x06251ea76c770de8ba7a6aee43b5d540353e2a03": {
+    "address": "0x06251EA76C770de8BA7A6AEe43B5D540353E2A03",
+    "points": 10,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 1749922370081,
+    "lastReviewTimestamp": 0
   }
 }

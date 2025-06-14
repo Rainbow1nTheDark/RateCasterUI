@@ -1,19 +1,22 @@
+/// <reference types="node" />
 import dotenv from 'dotenv';
 dotenv.config();
 
 import { ethers } from 'ethers';
-import { RateCaster, DappRegistered, DappReview } from './RateCasterSDK/src';
+import { RateCaster, DappRegistered as SDKDappRegistered, DappReview as SDKDappReview } from './RateCasterSDK/src'; // Assuming SDK exports ProjectStats
 import http from 'http';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import express from 'express';
+import express, { Request, Response, NextFunction, ErrorRequestHandler } from 'express';
 import cors from 'cors';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import {
     DappRegistered as FrontendDappRegistered,
     DappReview as FrontendDappReview,
     UserProfile as FrontendUserProfile,
+    ProjectStats as FrontendProjectStats, // Use Frontend type for consistency
+    CategoryId
 } from './types';
 
 // --- Configuration ---
@@ -22,7 +25,7 @@ const __dirname = path.dirname(__filename);
 const RPC_URL = 'https://polygon-rpc.com';
 const WEBSOCKET_URL = process.env.WEBSOCKET_URL || 'wss://polygon-mainnet.g.alchemy.com/v2/8df5Ufs4d85WriX-pY383TTWk740Q0P0';
 const CHAIN_ID = 137;
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001; // Ensure PORT is a number
 const DB_FILE_PATH = process.env.DB_FILE_PATH || path.join(__dirname, 'user_profiles.json');
 const POINTS_DAILY_LOGIN = 10;
 const POINTS_PER_REVIEW = 25;
@@ -145,7 +148,7 @@ async function initializeSDK(): Promise<RateCaster> {
 async function fetchInitialData(sdk: RateCaster) {
     logger.info('Fetching initial dApp and review data using SDK...');
     try {
-        const sdkDapps = await sdk.getAllDapps(true);
+        const sdkDapps = await sdk.getAllDapps(true); // Fetch with aggregates initially for dappsStore
         dappsStore = sdkDapps.map(dapp => ({
             ...dapp,
             category: dapp.category
@@ -208,22 +211,24 @@ async function handleReviewPoints(userAddress: string) {
     await updateUserProfileInDB(profile);
 }
 
-async function processNewReview(reviewFromSDK: DappReview) {
+async function processNewReview(reviewFromSDK: SDKDappReview) { // Use SDKDappReview
     logger.info(`Processing new review event: ID ${reviewFromSDK.id} for dApp ${reviewFromSDK.dappId}`);
 
     let dapp = dappsStore.find(d => d.dappId === reviewFromSDK.dappId);
     if (!dapp && ratecasterSDKInstance) {
-        logger.warn(`DApp ${reviewFromSDK.dappId} not in local store. Fetching from SDK.`);
+        logger.warn(`DApp ${reviewFromSDK.dappId} not in local store. Fetching from SDK (with aggregates).`);
         try {
+            // Fetch with aggregates to update the dappsStore correctly
             const newDappSDK = await ratecasterSDKInstance.getDapp(reviewFromSDK.dappId, true);
             if (newDappSDK) {
                 const newDappFrontend: FrontendDappRegistered = {
                     ...newDappSDK,
-                    category: newDappSDK.category,
+                    category: newDappSDK.category, // Keep using SDK's category string
                 };
-                dappsStore.push(newDappFrontend);
+                dappsStore = dappsStore.filter(d => d.dappId !== newDappFrontend.dappId); // Remove old if exists
+                dappsStore.push(newDappFrontend); // Add/update
                 dapp = newDappFrontend;
-                logger.info(`Fetched and added dApp ${newDappFrontend.name} to store.`);
+                logger.info(`Fetched and updated dApp ${newDappFrontend.name} in store.`);
                 if (io) io.emit('dappUpdate', serializeBigInt(newDappFrontend));
             }
         } catch (fetchErr) {
@@ -232,7 +237,7 @@ async function processNewReview(reviewFromSDK: DappReview) {
     }
 
     const fullReview: FrontendDappReview = {
-        ...reviewFromSDK,
+        ...(reviewFromSDK as any), // Cast to any if SDKDappReview is not directly assignable
         dappName: dapp?.name || 'Unknown Dapp',
     };
 
@@ -243,26 +248,25 @@ async function processNewReview(reviewFromSDK: DappReview) {
     reviewsByDappStore[fullReview.dappId] = [fullReview, ...reviewsByDappStore[fullReview.dappId].filter(r => r.id !== fullReview.id)]
         .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-    let updatedDappForEmit: FrontendDappRegistered | undefined;
-    if (dapp) {
-        const dappIndex = dappsStore.findIndex(d => d.dappId === fullReview.dappId);
-        if (dappIndex !== -1) {
-            const currentReviews = reviewsByDappStore[fullReview.dappId];
-            const newTotalReviews = currentReviews.length;
-            const newAverageRating = newTotalReviews > 0
-                ? currentReviews.reduce((sum, r) => sum + r.starRating, 0) / newTotalReviews
-                : 0;
+    // Update aggregates in dappsStore if dapp exists
+    const dappIndex = dappsStore.findIndex(d => d.dappId === fullReview.dappId);
+    if (dappIndex !== -1) {
+        const currentReviewsForDapp = reviewsByDappStore[fullReview.dappId];
+        const newTotalReviews = currentReviewsForDapp.length;
+        const newAverageRating = newTotalReviews > 0
+            ? currentReviewsForDapp.reduce((sum, r) => sum + r.starRating, 0) / newTotalReviews
+            : 0;
 
-            dappsStore[dappIndex] = {
-                ...dappsStore[dappIndex],
-                totalReviews: newTotalReviews,
-                averageRating: newAverageRating
-            };
-            updatedDappForEmit = dappsStore[dappIndex];
-            logger.debug(`Updated dApp ${dapp.name} aggregates: ${newTotalReviews} reviews, ${newAverageRating.toFixed(2)} avg rating.`);
-            if (io) io.emit('dappUpdate', serializeBigInt(updatedDappForEmit));
-        }
+        dappsStore[dappIndex] = {
+            ...dappsStore[dappIndex],
+            totalReviews: newTotalReviews,
+            averageRating: newAverageRating
+        };
+        const updatedDappForEmit = dappsStore[dappIndex];
+        logger.debug(`Updated dApp ${dappsStore[dappIndex].name} aggregates: ${newTotalReviews} reviews, ${newAverageRating.toFixed(2)} avg rating.`);
+        if (io) io.emit('dappUpdate', serializeBigInt(updatedDappForEmit));
     }
+
 
     await handleReviewPoints(fullReview.rater);
     if (io) {
@@ -288,7 +292,7 @@ function serializeBigInt(obj: any): any {
 async function startReviewListener(sdk: RateCaster) {
     logger.info('Starting SDK review listener for DappRatingSubmitted events...');
     try {
-        await sdk.listenToReviews((review: DappReview) => {
+        await sdk.listenToReviews((review: SDKDappReview) => { // Use SDKDappReview
             logger.debug('Received DappRatingSubmitted event:', review);
             processNewReview(review).catch(error => {
                 logger.error('Error processing review event:', error);
@@ -297,7 +301,6 @@ async function startReviewListener(sdk: RateCaster) {
         logger.info('Successfully subscribed to DappRatingSubmitted events.');
     } catch (error) {
         logger.error('Failed to subscribe to DappRatingSubmitted events:', error);
-        // Retry after a delay
         setTimeout(() => startReviewListener(sdk), 5000);
     }
 }
@@ -323,7 +326,7 @@ export async function startBackendApplication() {
             transports: ['websocket', 'polling']
         });
 
-        io.on('connection', (socket: any) => {
+        io.on('connection', (socket: Socket) => {
             logger.info(`Socket.IO: Client connected: ${socket.id}`);
             socket.on('disconnect', (reason: string) => {
                 logger.info(`Socket.IO: Client disconnected: ${socket.id}, Reason: ${reason}`);
@@ -336,37 +339,76 @@ export async function startBackendApplication() {
             logger.warn("SDK does not support listenToReviews or WebSocket provider missing; real-time updates disabled.");
         }
 
-        app.get('/api/health', (req: any, res: any) => res.status(200).json({
+        app.get('/api/health', (req: Request, res: Response) => res.status(200).json({
             status: 'UP',
             timestamp: new Date().toISOString(),
             sdkInitialized,
             chain: ratecasterSDKInstance?.getCurrentChain()?.name || "N/A"
         }));
 
-        app.get('/api/dapps', (req: any, res: any) => {
+        app.get('/api/dapps', (req: Request, res: Response) => {
             logger.debug(`Serving /api/dapps request with ${dappsStore.length} dapps.`);
             res.json(serializeBigInt(dappsStore));
         });
 
-        app.get('/api/reviews/all', (req: any, res: any) => {
+        app.get('/api/reviews/all', (req: Request, res: Response) => {
             logger.debug(`Serving /api/reviews/all request with ${allReviewsStore.length} reviews.`);
             res.json(allReviewsStore);
         });
 
-        app.get('/api/reviews/dapp/:dappId', (req: any, res: any) => {
+        app.get('/api/reviews/dapp/:dappId', (req: Request, res: Response) => {
             const reviewsForDapp = reviewsByDappStore[req.params.dappId] || [];
             logger.debug(`Serving /api/reviews/dapp/${req.params.dappId} with ${reviewsForDapp.length} reviews.`);
             res.json(reviewsForDapp);
         });
+        
+        // NEW Endpoint for DApp Statistics
+        app.get('/api/stats/dapp/:dappId', (req: Request, res: Response) => {
+            const dappId = req.params.dappId;
+            const reviewsForDapp = reviewsByDappStore[dappId] || [];
+            
+            if (reviewsForDapp.length === 0) {
+                logger.debug(`No reviews found for dApp ${dappId}, returning zero stats.`);
+                const zeroStats: FrontendProjectStats = {
+                    dappId: dappId,
+                    averageRating: 0,
+                    totalReviews: 0,
+                    ratingDistribution: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 },
+                };
+                return res.json(zeroStats);
+            }
 
-        app.get('/api/reviews/user/:userAddress', (req: any, res: any) => {
+            const totalReviews = reviewsForDapp.length;
+            const sumOfRatings = reviewsForDapp.reduce((sum, review) => sum + review.starRating, 0);
+            const averageRating = totalReviews > 0 ? sumOfRatings / totalReviews : 0;
+            
+            const ratingDistribution: FrontendProjectStats['ratingDistribution'] = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+            for (const review of reviewsForDapp) {
+                const ratingKey = review.starRating.toString() as keyof FrontendProjectStats['ratingDistribution'];
+                if (ratingDistribution.hasOwnProperty(ratingKey)) {
+                    ratingDistribution[ratingKey]++;
+                }
+            }
+
+            const projectStats: FrontendProjectStats = {
+                dappId,
+                averageRating,
+                totalReviews,
+                ratingDistribution,
+            };
+            logger.debug(`Serving /api/stats/dapp/${dappId} with calculated stats:`, projectStats);
+            res.json(projectStats);
+        });
+
+
+        app.get('/api/reviews/user/:userAddress', (req: Request, res: Response) => {
             const userAddr = req.params.userAddress.toLowerCase();
             const userReviews = allReviewsStore.filter(r => r.rater.toLowerCase() === userAddr);
             logger.debug(`Serving /api/reviews/user/${userAddr} with ${userReviews.length} reviews.`);
             res.json(userReviews);
         });
 
-        app.get('/api/categories', (req: any, res: any) => {
+        app.get('/api/categories', (req: Request, res: Response) => {
             try {
                 if (!ratecasterSDKInstance) throw new Error("SDK not initialized");
                 const categories = ratecasterSDKInstance.getCategoryOptions();
@@ -378,7 +420,7 @@ export async function startBackendApplication() {
             }
         });
 
-        app.post('/api/actions/wallet-connected', async (req: any, res: any) => {
+        app.post('/api/actions/wallet-connected', async (req: Request, res: Response) => {
             const { userAddress } = req.body;
             if (!userAddress || !ethers.isAddress(userAddress)) return res.status(400).json({ error: 'Valid userAddress is required.' });
             try {
@@ -392,7 +434,7 @@ export async function startBackendApplication() {
             }
         });
 
-        app.get('/api/users/profile/:userAddress', async (req: any, res: any) => {
+        app.get('/api/users/profile/:userAddress', async (req: Request, res: Response) => {
             if (!ethers.isAddress(req.params.userAddress)) return res.status(400).json({ error: 'Invalid address.' });
             try {
                 const profile = await getOrCreateUserProfile(req.params.userAddress);
@@ -404,7 +446,7 @@ export async function startBackendApplication() {
             }
         });
 
-        app.get('/api/leaderboard/top-reviewers', (req: any, res: any) => {
+        app.get('/api/leaderboard/top-reviewers', (req: Request, res: Response) => {
             const leaderboard = Object.values(userProfilesDB)
                 .sort((a, b) => b.points - a.points)
                 .slice(0, 20)
@@ -413,7 +455,7 @@ export async function startBackendApplication() {
             res.json(leaderboard);
         });
 
-        app.get('/api/leaderboard/top-streaks', (req: any, res: any) => {
+        app.get('/api/leaderboard/top-streaks', (req: Request, res: Response) => {
             const leaderboard = Object.values(userProfilesDB)
                 .filter(p => p.reviewStreak > 0)
                 .sort((a, b) => b.reviewStreak - a.reviewStreak)
@@ -423,13 +465,14 @@ export async function startBackendApplication() {
             res.json(leaderboard);
         });
 
-        app.post('/api/actions/refresh-dapp-from-chain', async (req: any, res: any) => {
+        app.post('/api/actions/refresh-dapp-from-chain', async (req: Request, res: Response) => {
             const { dappId } = req.body;
             if (!dappId || typeof dappId !== 'string') return res.status(400).json({ error: 'Valid dappId required.' });
             if (ratecasterSDKInstance) {
                 try {
                     logger.info(`Attempting to refresh dApp ${dappId} from chain...`);
-                    const fetchedDappSDK = await ratecasterSDKInstance.getDapp(dappId, true);
+                    // Fetch with aggregates (true) to update the main dappsStore correctly.
+                    const fetchedDappSDK = await ratecasterSDKInstance.getDapp(dappId, true); 
                     if (fetchedDappSDK) {
                         const fetchedDappFrontend: FrontendDappRegistered = {
                             ...fetchedDappSDK,
@@ -438,19 +481,18 @@ export async function startBackendApplication() {
                         const idx = dappsStore.findIndex(d => d.dappId === fetchedDappFrontend.dappId);
                         if (idx !== -1) dappsStore[idx] = fetchedDappFrontend; else dappsStore.push(fetchedDappFrontend);
 
-                        const reviewsForDapp = await ratecasterSDKInstance.getProjectReviews(fetchedDappSDK.dappId);
-                        const frontendReviewsForDapp = reviewsForDapp.map(sdkReview => ({
-                            ...sdkReview,
+                        // Also refresh individual reviews for this dApp in reviewsByDappStore
+                        const reviewsForDappSDK = await ratecasterSDKInstance.getProjectReviews(fetchedDappSDK.dappId);
+                        const frontendReviewsForDapp = reviewsForDappSDK.map(sdkRev => ({
+                            ...(sdkRev as any), // Cast if SDKDappReview is not directly assignable
                             dappName: fetchedDappFrontend.name,
                         }));
                         reviewsByDappStore[fetchedDappSDK.dappId] = frontendReviewsForDapp;
-
-                        const currentReviews = reviewsByDappStore[fetchedDappSDK.dappId] || [];
-                        const total = currentReviews.length;
-                        const avg = total > 0 ? currentReviews.reduce((s, r) => s + r.starRating, 0) / total : 0;
-                        fetchedDappFrontend.totalReviews = total;
-                        fetchedDappFrontend.averageRating = avg;
-                        if (idx !== -1) dappsStore[idx] = fetchedDappFrontend;
+                        
+                        // Update allReviewsStore as well
+                        allReviewsStore = allReviewsStore.filter(r => r.dappId !== dappId);
+                        allReviewsStore.push(...frontendReviewsForDapp);
+                        allReviewsStore.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
                         if (io) io.emit('dappUpdate', fetchedDappFrontend);
                         logger.info(`DApp ${dappId} refreshed and update emitted.`);
@@ -467,10 +509,15 @@ export async function startBackendApplication() {
             }
         });
 
-        app.use((err: any, req: any, res: any, next: any) => {
+        const generalErrorHandler: ErrorRequestHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
             logger.error('Unhandled Express error:', err.stack || err.message || err);
+            if (res.headersSent) {
+                return next(err);
+            }
             res.status(500).json({ error: 'An unexpected server error occurred.' });
-        });
+        };
+        app.use(generalErrorHandler);
+
 
         httpServer.listen(PORT, () => logger.info(`Backend server listening on http://localhost:${PORT}`));
     } catch (error) {
@@ -496,7 +543,7 @@ async function gracefulShutdown(signal: string) {
     }
     await saveUserProfilesToDB();
     logger.info('User profiles saved.');
-    setTimeout(() => process.exit(0), 2000);
+    setTimeout(() => process.exit(0), 2000); // Exit after a delay
 }
 
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
@@ -504,7 +551,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('unhandledRejection', (reason, promise) => logger.error('Unhandled Rejection:', { promise, reason }));
 process.on('uncaughtException', (error) => {
     logger.error('Uncaught Exception:', error);
-    gracefulShutdown('uncaughtException').finally(() => process.exit(1));
+    gracefulShutdown('uncaughtException').finally(() => process.exit(1)); // Exit after shutdown attempt
 });
 
 startBackendApplication();

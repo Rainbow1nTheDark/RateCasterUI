@@ -55,6 +55,19 @@ export interface LeaderboardEntry {
   rank: number;
 }
 
+export interface ProjectStats {
+  dappId: string;
+  averageRating: number;
+  totalReviews: number;
+  ratingDistribution: {
+    '1': number;
+    '2': number;
+    '3': number;
+    '4': number;
+    '5': number;
+  };
+}
+
 
 // Category System from SDK
 export enum CategoryId {

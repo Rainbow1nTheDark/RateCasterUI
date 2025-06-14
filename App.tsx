@@ -3,7 +3,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { useAccount, useSwitchChain, useWalletClient } from 'wagmi';
 import { QueryClient } from '@tanstack/react-query';
-import { DappRegistered, DappReview, CategoryOption, UserProfile, LeaderboardEntry } from './types';
+import { DappRegistered, DappReview, CategoryOption, UserProfile, LeaderboardEntry, ProjectStats } from './types';
 import DappCard from './components/DappCard';
 import DappForm from './components/DappForm';
 import RatingModal from './components/RatingModal';
@@ -14,6 +14,7 @@ import Spinner from './components/Spinner';
 import Notification from './components/Notification';
 import UserProfileDisplay from './components/UserProfileDisplay';
 import LeaderboardTab from './components/LeaderboardTab';
+import DappDetailPage from './components/DappDetailPage'; // Import new component
 import { connectWallet as connectWalletService } from './services/walletService';
 import { ExclamationTriangleIcon } from './components/icons/ExclamationTriangleIcon';
 import { RateCaster } from './RateCasterSDK/src';
@@ -43,12 +44,13 @@ const App: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('browse');
-  const [selectedDapp, setSelectedDapp] = useState<DappRegistered | null>(null);
+  const [selectedDapp, setSelectedDapp] = useState<DappRegistered | null>(null); // For edit form
+  const [selectedDappIdForDetailPage, setSelectedDappIdForDetailPage] = useState<string | null>(null); // For detail page
   const [ratingModalOpen, setRatingModalOpen] = useState<boolean>(false);
 
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isTxLoading, setIsTxLoading] = useState<boolean>(false);
-  const [isProfileLoading, setIsProfileLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // General loading for initial data, dapps list
+  const [isTxLoading, setIsTxLoading] = useState<boolean>(false); // For blockchain transactions
+  const [isProfileLoading, setIsProfileLoading] = useState<boolean>(false); // For user profile specific fetches
 
   const [newDappData, setNewDappData] = useState<Partial<DappRegistered>>({
     name: '', description: '', url: '', imageUrl: '', categoryId: 0,
@@ -76,7 +78,8 @@ useEffect(() => {
     setAppStatus('Connecting wallet...');
     const connectWalletAsync = async () => {
       try {
-        const provider = new ethers.BrowserProvider(walletClient);
+        // Reverted: Use walletClient directly
+        const provider = new ethers.BrowserProvider(walletClient as any);
         const signer = await provider.getSigner();
         setSigner(signer);
         const network = await provider.getNetwork();
@@ -85,13 +88,17 @@ useEffect(() => {
 
         if (Number(network.chainId) !== 137) {
           try {
-            // Attempt to switch to Polygon network
             setAppStatus('Requesting network switch to Polygon...');
             await switchChain({ chainId: polygon.id });
-            // After successful switch, update status
             setAppStatus(`Wallet Connected: Polygon`);
             setCurrentChainName('Polygon');
             setError('');
+             // After successful switch, re-initialize provider and signer with the new chain context from walletClient
+            // Reverted: Use walletClient directly
+            const newProvider = new ethers.BrowserProvider(walletClient as any);
+            const newSigner = await newProvider.getSigner();
+            setSigner(newSigner);
+
           } catch (switchError: any) {
             logger.error('Failed to switch to Polygon network:', switchError);
             setError('Failed to switch to Polygon network. Please switch manually in your wallet.');
@@ -121,7 +128,7 @@ useEffect(() => {
     setSigner(null);
     setUserProfile(null);
     setCurrentChainName(undefined);
-    setAppStatus('Services Connected.');
+    setAppStatus('Services Connected.'); // Or 'Wallet Disconnected'
     setError('');
   }
 }, [isConnected, address, connector, walletClient, switchChain]);
@@ -193,7 +200,7 @@ useEffect(() => {
       const dappsData: DappRegistered[] = await dappsResponse.json();
       setDapps(dappsData);
 
-      if (userAddress) {
+      if (userAddress) { // Refresh user reviews as well if user is connected
         const userReviewsResponse = await fetch(`${API_BASE_URL}/reviews/user/${userAddress}`);
         if (!userReviewsResponse.ok) throw new Error(`Failed to fetch user reviews: ${userReviewsResponse.statusText}`);
         const userReviewsData: DappReview[] = await userReviewsResponse.json();
@@ -203,12 +210,12 @@ useEffect(() => {
       setError('');
     } catch (err: any) {
       logger.error('Data refresh failed:', err);
-      setAppStatus(oldStatus);
+      setAppStatus(oldStatus); // Revert to old status on failure
       setError(err.message || 'Failed to refresh data');
     } finally {
       if (showLoadingIndicator) setIsLoading(false);
     }
-  }, [userAddress]);
+  }, [userAddress, appStatus]); // Added appStatus to dependencies for oldStatus
 
   useEffect(() => {
     setIsLoading(true);
@@ -222,7 +229,7 @@ useEffect(() => {
       refreshDappsAndReviews(true).catch(err => {
         logger.error('Initial data fetch failed:', err);
         setError(`Failed to load initial data: ${err.message}`);
-        setIsLoading(false);
+        setIsLoading(false); // Ensure loading stops on error
       });
       fetchCategories();
     });
@@ -239,7 +246,7 @@ useEffect(() => {
       logger.error('Socket.IO: Connection error:', err.message);
       setError(`Failed to connect to real-time service: ${err.message}.`);
       setAppStatus('Error: Real-time service connection failed');
-      setIsLoading(false);
+      setIsLoading(false); // Stop loading on connection error
     });
 
     const handleProfileUpdate = (profile: UserProfile) => {
@@ -253,26 +260,30 @@ useEffect(() => {
       logger.info('Socket.IO: New review event received:', reviewFromSocket);
       setNewReviewNotification(reviewFromSocket);
 
+      // Optimistically update allReviews (not currently displayed but good for consistency)
       setAllReviews(prev => [
         reviewFromSocket,
         ...prev.filter(r => r.id !== reviewFromSocket.id)
       ].sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0)));
 
+      // Update user-specific reviews if it's their review
       if (userAddress && reviewFromSocket.rater.toLowerCase() === userAddress.toLowerCase()) {
         setUserReviews(prev => [
           reviewFromSocket,
           ...prev.filter(r => r.id !== reviewFromSocket.id)
         ].sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0)));
       }
-
+      
+      // Refresh dApp list to get new average ratings and review counts
+      // Consider a more targeted update if performance becomes an issue
       try {
         const dappsResponse = await fetch(`${API_BASE_URL}/dapps`);
         if (!dappsResponse.ok) throw new Error(`Failed to fetch dApps: ${dappsResponse.statusText}`);
         const dappsData: DappRegistered[] = await dappsResponse.json();
         setDapps(dappsData);
-        logger.debug('Fetched updated dApps with new aggregates:', dappsData);
+        logger.debug('Fetched updated dApps with new aggregates after new review:', dappsData);
       } catch (err: any) {
-        logger.error('Failed to fetch updated dApps:', err.message);
+        logger.error('Failed to fetch updated dApps after new review:', err.message);
         setError(prev => `${prev ? prev + '; ' : ''}Failed to update dApp data: ${err.message}`);
       }
     };
@@ -282,6 +293,8 @@ useEffect(() => {
       setDapps(prevDapps =>
         prevDapps.map(d => d.dappId === updatedDappFromSocket.dappId ? updatedDappFromSocket : d)
       );
+       // If the currently viewed detail page dApp is updated, we might need to refresh it.
+      // This is handled by DappDetailPage's own useEffect for now, but a direct refresh could be an optimization.
     };
 
     socket.on('userProfileUpdate', handleProfileUpdate);
@@ -293,50 +306,19 @@ useEffect(() => {
       socket.off('userProfileUpdate', handleProfileUpdate);
       socket.off('newReview', handleNewReviewEvent);
       socket.off('dappUpdate', handleDappUpdateEvent);
+      // socket.disconnect(); // Consider if disconnect is always desired on App unmount
     };
-  }, []);
+  }, [userAddress, refreshDappsAndReviews]); // Added refreshDappsAndReviews to dependency array
 
   useEffect(() => {
     if (userAddress) {
       fetchUserSpecificData(userAddress);
     } else {
-      setUserReviews([]);
+      setUserReviews([]); // Clear user-specific data when disconnected
       setUserProfile(null);
     }
   }, [userAddress, fetchUserSpecificData]);
 
-  const handleConnectWallet = async () => {
-    setIsLoading(true);
-    setAppStatus('Connecting wallet...');
-    try {
-      const { signer: newSigner, address, provider } = await connectWalletService();
-      setSigner(newSigner);
-      setUserAddress(address);
-
-      const network = await provider.getNetwork();
-      const chainName = (!network.name || network.name === 'unknown') ? `ChainID ${network.chainId}` : network.name;
-      setCurrentChainName(chainName);
-
-      if (sdk) {
-        const sdkChainInfo = sdk.getCurrentChain();
-        if (Number(network.chainId) !== Number(sdkChainInfo.chainId)) {
-          logger.warn(`Wallet connected to ${chainName} (ID: ${network.chainId}), but SDK might be pre-configured for ${sdkChainInfo.name} (ID: ${sdkChainInfo.chainId}). Ensure operations use the correct network via signer.`);
-        }
-      }
-
-      setAppStatus(`Wallet Connected: ${chainName}`);
-      setError('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to connect wallet');
-      setAppStatus('Error: Wallet connection failed');
-      setUserAddress(null);
-      setSigner(null);
-      setUserProfile(null);
-      setCurrentChainName(undefined);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleDappFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -355,6 +337,49 @@ useEffect(() => {
 
   const handleStarRatingChange = (rating: number) => setReviewData(prev => ({ ...prev, rating }));
 
+  const ensureWalletConnected = async (): Promise<ethers.Signer | null> => {
+    if (signer && userAddress && (await signer.getAddress()).toLowerCase() === userAddress.toLowerCase()) {
+      // Check if current signer network matches required (Polygon)
+      const network = await (signer.provider as ethers.BrowserProvider).getNetwork();
+      if (Number(network.chainId) === polygon.id) {
+        return signer;
+      } else {
+        setError('Wallet is not on Polygon. Please switch network.');
+        setAppStatus('Error: Wrong network');
+        // Attempt to switch, or guide user.
+         try {
+            setAppStatus('Requesting network switch to Polygon...');
+            if (switchChain && walletClient) { // Ensure switchChain and walletClient are available
+                 await switchChain({ chainId: polygon.id });
+                 // Re-fetch signer after switch
+                 // Reverted: Use walletClient directly
+                 const provider = new ethers.BrowserProvider(walletClient as any);
+                 const newSigner = await provider.getSigner();
+                 setSigner(newSigner);
+                 const newNetwork = await provider.getNetwork();
+                 setCurrentChainName((!newNetwork.name || newNetwork.name === 'unknown') ? `ChainID ${newNetwork.chainId}` : newNetwork.name);
+                 setAppStatus(`Wallet Connected: ${currentChainName}`);
+                 setError(''); // Clear previous error
+                 return newSigner;
+            } else {
+                 setError('Network switch function not available or walletClient missing. Please switch manually.');
+                 setAppStatus('Error: Manual network switch required');
+            }
+        } catch (switchError: any) {
+            logger.error('Failed to switch to Polygon during action:', switchError);
+            setError('Failed to switch to Polygon. Please switch manually in your wallet.');
+            setAppStatus('Error: Wrong network');
+        }
+        return null;
+      }
+    }
+    // If no signer, or address mismatch, or network mismatch after attempt, try full connection/re-connection
+    setError('Wallet not connected or on wrong network. Please connect/switch and try again.');
+    // Trigger connect modal if available or prompt user. For now, relies on user clicking ConnectButton.
+    return null;
+  };
+
+
   const handleRegisterDapp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDappData.name || !newDappData.description || !newDappData.url || !newDappData.imageUrl || !newDappData.categoryId) {
@@ -362,23 +387,14 @@ useEffect(() => {
       return;
     }
 
-    let currentSigner = signer;
+    const currentSigner = await ensureWalletConnected();
     if (!currentSigner) {
-      try {
-        const { signer: newSignerVal, address, provider } = await connectWalletService();
-        setSigner(newSignerVal);
-        setUserAddress(address);
-        const network = await provider.getNetwork();
-        setCurrentChainName((!network.name || network.name === 'unknown') ? `ChainID ${network.chainId}` : network.name);
-        currentSigner = newSignerVal;
-      } catch (walletErr: any) {
-        setError(walletErr.message || "Wallet connection failed for DApp registration.");
-        return;
-      }
+      setError(prev => `${prev} Wallet not ready for DApp registration.`);
+      return;
     }
 
-    if (!sdk || !currentSigner) {
-      setError("SDK not available or signer not ready. Cannot register DApp.");
+    if (!sdk) {
+      setError("SDK not available. Cannot register DApp.");
       return;
     }
 
@@ -390,24 +406,32 @@ useEffect(() => {
         newDappData.imageUrl!, Number(newDappData.categoryId), currentSigner
       );
       logger.info(`DApp Registration transaction sent: ${txResponse.hash}. Waiting for confirmation...`);
+      setAppStatus(`Registering ${newDappData.name}...`);
       await txResponse.wait();
       logger.info(`DApp Registration successful.`);
+      setAppStatus(`DApp ${newDappData.name} registered!`);
       setNewDappData({ name: '', description: '', url: '', imageUrl: '', categoryId: 0 });
-      setActiveTab('browse');
+      setActiveTab('browse'); // Switch to browse tab
+      // refreshDappsAndReviews will be triggered by socket event 'dappUpdate'
     } catch (err: any) {
       logger.error(`DApp Registration Failed:`, err);
       const readableError = err.reason || err.data?.message || err.message || (err.error?.message) || 'Transaction failed. Check console.';
       setError(readableError);
+      setAppStatus('DApp registration failed.');
     } finally {
       setIsTxLoading(false);
     }
   };
 
   const startEditDapp = async (dappToEdit: DappRegistered) => {
-    if (!userAddress) {
-      setError("Please connect your wallet to edit dApps.");
-      await handleConnectWallet();
-      if (!userAddress) return;
+    const currentSigner = await ensureWalletConnected();
+     if (!currentSigner || !userAddress) { // Also check userAddress explicitly
+      setError("Please connect your wallet and ensure it's on Polygon to edit dApps.");
+      return;
+    }
+    if (userAddress.toLowerCase() !== dappToEdit.owner.toLowerCase()){
+      setError("You are not the owner of this dApp.");
+      return;
     }
     setSelectedDapp({ ...dappToEdit, categoryId: Number(dappToEdit.categoryId) });
     setActiveTab('edit');
@@ -420,23 +444,13 @@ useEffect(() => {
       return;
     }
 
-    let currentSigner = signer;
+    const currentSigner = await ensureWalletConnected();
     if (!currentSigner) {
-      try {
-        const { signer: newSignerVal, address, provider } = await connectWalletService();
-        setSigner(newSignerVal);
-        setUserAddress(address);
-        const network = await provider.getNetwork();
-        setCurrentChainName((!network.name || network.name === 'unknown') ? `ChainID ${network.chainId}` : network.name);
-        currentSigner = newSignerVal;
-      } catch (walletErr: any) {
-        setError(walletErr.message || "Wallet connection failed for DApp update.");
-        return;
-      }
+      setError(prev => `${prev} Wallet not ready for DApp update.`);
+      return;
     }
-
-    if (!sdk || !currentSigner) {
-      setError("SDK not available or signer not ready. Cannot update DApp.");
+     if (!sdk) {
+      setError("SDK not available. Cannot update DApp.");
       return;
     }
 
@@ -448,14 +462,18 @@ useEffect(() => {
         selectedDapp.url, selectedDapp.imageUrl, Number(selectedDapp.categoryId), currentSigner
       );
       logger.info(`DApp Update transaction sent: ${txResponse.hash}. Waiting for confirmation...`);
+      setAppStatus(`Updating ${selectedDapp.name}...`);
       await txResponse.wait();
       logger.info(`DApp Update successful.`);
+      setAppStatus(`DApp ${selectedDapp.name} updated!`);
       setSelectedDapp(null);
       setActiveTab('browse');
+      // refreshDappsAndReviews will be triggered by socket event 'dappUpdate'
     } catch (err: any) {
       logger.error(`DApp Update Failed:`, err);
       const readableError = err.reason || err.data?.message || err.message || (err.error?.message) || 'Transaction failed. Check console.';
       setError(readableError);
+      setAppStatus('DApp update failed.');
     } finally {
       setIsTxLoading(false);
     }
@@ -467,24 +485,13 @@ useEffect(() => {
       setError('Invalid review data. Select a dApp and rating.');
       return;
     }
-
-    let currentSigner = signer;
+    const currentSigner = await ensureWalletConnected();
     if (!currentSigner) {
-      try {
-        const { signer: newSignerVal, address, provider } = await connectWalletService();
-        setSigner(newSignerVal);
-        setUserAddress(address);
-        const network = await provider.getNetwork();
-        setCurrentChainName((!network.name || network.name === 'unknown') ? `ChainID ${network.chainId}` : network.name);
-        currentSigner = newSignerVal;
-      } catch (walletErr: any) {
-        setError(walletErr.message || "Wallet connection failed for review submission.");
-        return;
-      }
+      setError(prev => `${prev} Wallet not ready for review submission.`);
+      return;
     }
-
-    if (!sdk || !currentSigner) {
-      setError("SDK not available or signer not ready. Cannot submit review.");
+    if (!sdk) {
+      setError("SDK not available. Cannot submit review.");
       return;
     }
 
@@ -495,30 +502,46 @@ useEffect(() => {
         reviewData.dappId, reviewData.rating, reviewData.reviewText, currentSigner
       );
       logger.info(`Review Submission transaction sent: ${txResponse.hash}. Waiting for confirmation...`);
+      setAppStatus(`Submitting review for ${dapps.find(d => d.dappId === reviewData.dappId)?.name || 'dApp'}...`);
       await txResponse.wait();
       logger.info(`Review Submission successful.`);
-      setReviewData({ dappId: '', rating: 5, reviewText: '' });
+      setAppStatus(`Review submitted!`);
+      setReviewData({ dappId: '', rating: 5, reviewText: '' }); // Reset form
       setRatingModalOpen(false);
+      // Data refresh (user profile, dApp aggregates) handled by socket events 'userProfileUpdate' and 'newReview'
     } catch (err: any) {
       logger.error(`Review Submission Failed:`, err);
       const readableError = err.reason || err.data?.message || err.message || (err.error?.message) || 'Transaction failed. Check console.';
       setError(readableError);
+      setAppStatus('Review submission failed.');
     } finally {
       setIsTxLoading(false);
     }
   };
 
-  const openRatingModal = (dappId: string) => {
-    if (!userAddress) {
-      setError("Please connect your wallet to rate dApps.");
-      handleConnectWallet();
+  const openRatingModal = async (dappId: string) => {
+    const currentSigner = await ensureWalletConnected();
+    if (!currentSigner) { // Check if ensureWalletConnected returned a signer
+      setError("Please connect your wallet and ensure it's on Polygon to rate dApps.");
       return;
     }
+    // If wallet is connected and on the right network, proceed to open modal
     setReviewData(prev => ({ ...prev, dappId, rating: prev.dappId === dappId ? prev.rating : 5, reviewText: prev.dappId === dappId ? prev.reviewText : '' }));
     setRatingModalOpen(true);
   };
 
-  const CombinedLoading = isLoading || isTxLoading;
+  const handleNavigateToDappDetail = (dappId: string) => {
+    setSelectedDappIdForDetailPage(dappId);
+  };
+
+  const handleBackFromDetailPage = () => {
+    setSelectedDappIdForDetailPage(null);
+    // Optionally, ensure the browse tab is active or based on previous state
+    setActiveTab('browse'); 
+  };
+
+
+  const CombinedLoading = isLoading || isTxLoading; // For disabling tabs etc.
 
   const dappsToDisplay = selectedCategory
     ? dapps.filter(dapp => dapp.categoryId === Number(selectedCategory))
@@ -527,7 +550,32 @@ useEffect(() => {
   const uniqueCategoryGroupsForFilter = Array.from(new Set(categoriesForFilter.map(opt => opt.group)))
     .sort((a: string, b: string) => a.localeCompare(b));
 
-  // In App.tsx, replace the return statement with:
+  // Main Render Logic
+  if (selectedDappIdForDetailPage) {
+    return (
+      <div className="min-h-screen bg-neutral-900 text-neutral-200 flex justify-center p-2 sm:p-4 md:p-6">
+         <Notification review={newReviewNotification} onClose={() => setNewReviewNotification(null)} />
+        <DappDetailPage
+          dappId={selectedDappIdForDetailPage}
+          onBack={handleBackFromDetailPage}
+          openRatingModal={openRatingModal}
+          userAddress={userAddress}
+        />
+        {/* RatingModal needs to be available globally if DappDetailPage triggers it */}
+        <RatingModal
+            ratingModalOpen={ratingModalOpen}
+            dapps={dapps} // Pass all dapps so modal can find selected one by ID
+            reviewData={reviewData}
+            isLoading={isTxLoading}
+            handleReviewChange={handleReviewFormChange}
+            handleStarRatingChange={handleStarRatingChange}
+            handleSubmitReview={handleSubmitReview}
+            setRatingModalOpen={setRatingModalOpen}
+        />
+      </div>
+    );
+  }
+
 return (
   <div className="min-h-screen bg-neutral-900 text-neutral-200 flex justify-center p-2 sm:p-4 md:p-6">
     <Notification review={newReviewNotification} onClose={() => setNewReviewNotification(null)} />
@@ -545,7 +593,7 @@ return (
             sdkStatus={appStatus}
             userAddress={userAddress}
             isLoading={isLoading && (appStatus.includes("wallet") || appStatus.includes("Connecting to services") || appStatus.includes("Initializing") || appStatus.includes("Fetching"))}
-            connectWallet={handleConnectWallet}
+            connectWallet={async () => { await ensureWalletConnected(); }} // StatusBar connect button can use this
             currentChainName={currentChainName}
           />
         </div>
@@ -564,7 +612,7 @@ return (
         </div>
       )}
 
-      <Tabs activeTab={activeTab} setActiveTab={setActiveTab} isLoading={CombinedLoading} />
+      <Tabs activeTab={activeTab} setActiveTab={setActiveTab} isLoading={CombinedLoading || isProfileLoading} />
 
       <main className="mt-6">
         {activeTab === 'browse' && (
@@ -625,6 +673,7 @@ return (
                     userAddress={userAddress}
                     startEditDapp={startEditDapp}
                     openRatingModal={openRatingModal}
+                    onNavigateToDetail={handleNavigateToDappDetail} // Pass navigation handler
                   />
                 ))}
               </div>
@@ -656,7 +705,7 @@ return (
               <div className="text-center py-10 px-4 sm:px-6 bg-neutral-800 rounded-lg shadow">
                 <p className="text-lg sm:text-xl text-neutral-400">Please connect your wallet to view your reviews.</p>
               </div>
-            ) : isProfileLoading && userReviews.length === 0 ? (
+            ) : isProfileLoading && userReviews.length === 0 ? ( // Show spinner if profile loading and no reviews yet
               <div className="flex flex-col justify-center items-center h-64">
                 <Spinner size="lg" /> <span className="ml-4 text-lg sm:text-xl text-neutral-400">Loading your reviews...</span>
               </div>
