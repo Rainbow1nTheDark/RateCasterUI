@@ -1,5 +1,7 @@
-
+// services/walletService.ts
 import { ethers } from 'ethers';
+import { getAccount, getWalletClient } from '@wagmi/core';
+import { wagmiConfig } from '../walletConfig';
 
 interface WalletConnectionResult {
   signer: ethers.Signer;
@@ -8,22 +10,32 @@ interface WalletConnectionResult {
 }
 
 export const connectWallet = async (): Promise<WalletConnectionResult> => {
-  if (!(window as any).ethereum) {
-    throw new Error('No Ethereum wallet detected. Please install MetaMask or a compatible wallet.');
-  }
-
   try {
-    const browserProvider = new ethers.BrowserProvider((window as any).ethereum);
-    await browserProvider.send('eth_requestAccounts', []); // Request account access
-    const signer = await browserProvider.getSigner();
-    const address = await signer.getAddress();
-    
-    return { signer, address, provider: browserProvider };
-  } catch (error: any) {
-    console.error("Error connecting wallet:", error);
-    if (error.code === 4001) { // User rejected request
-        throw new Error('Wallet connection request rejected by user.');
+    const account = getAccount(wagmiConfig);
+    if (!account.isConnected) {
+      throw new Error('No wallet connected. Please connect via RainbowKit.');
     }
+
+    const walletClient = await getWalletClient(wagmiConfig, { chainId: 137 });
+    if (!walletClient) {
+      throw new Error('Failed to get wallet client.');
+    }
+
+    const provider = new ethers.BrowserProvider(walletClient);
+    const signer = await provider.getSigner();
+    const address = account.address;
+    if (!address) {
+      throw new Error('Wallet address is undefined');
+    }
+
+    const network = await provider.getNetwork();
+    if (Number(network.chainId) !== 137) {
+      throw new Error('Wallet is not connected to Polygon. Please switch to the Polygon network.');
+    }
+
+    return { signer, address, provider };
+  } catch (error: any) {
+    console.error('Error connecting wallet:', error);
     throw new Error(error.message || 'Failed to connect wallet. Unknown error.');
   }
 };
