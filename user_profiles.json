@@ -1,10 +1,10 @@
 {
   "0xcb7437cad07230c488a118890494fbb545ddc7cb": {
     "address": "0xcb7437caD07230C488a118890494FBB545ddC7cB",
-    "points": 130,
+    "points": 255,
     "reviewStreak": 1,
-    "lastLoginTimestamp": 1748272453173,
-    "lastReviewTimestamp": 1748287035484
+    "lastLoginTimestamp": 1749933019524,
+    "lastReviewTimestamp": 1749949807488
   },
   "0x8f5505fd7f0149013eb45044dc1ffa956b3daf89": {
     "address": "0x8f5505fd7F0149013eB45044dc1fFA956B3daf89",
@@ -15,7 +15,7 @@
   },
   "0x06251ea76c770de8ba7a6aee43b5d540353e2a03": {
     "address": "0x06251EA76C770de8BA7A6AEe43B5D540353E2A03",
-    "points": 10,
+    "points": 20,
     "reviewStreak": 0,
     "lastLoginTimestamp": 1749922370081,
     "lastReviewTimestamp": 0

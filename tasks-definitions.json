@@ -1,0 +1,39 @@
+
+[
+  {
+    "taskId": "daily_login_001",
+    "title": "Daily Check-in",
+    "description": "Log in to RateCaster today to earn easy points!",
+    "type": "DAILY_LOGIN",
+    "cadence": "DAILY",
+    "pointsReward": 10,
+    "targetCount": 1,
+    "isActive": true,
+    "actionUrl": "/#",
+    "actionUrlText": "Login"
+  },
+  {
+    "taskId": "daily_rate_any_001",
+    "title": "Rate a dApp",
+    "description": "Submit a star rating for any dApp.",
+    "type": "DAILY_RATE_ANY_DAPP",
+    "cadence": "DAILY",
+    "pointsReward": 15,
+    "targetCount": 1,
+    "isActive": true,
+    "actionUrl": "/#browse",
+    "actionUrlText": "Find a dApp"
+  },
+  {
+    "taskId": "daily_review_any_001",
+    "title": "Write a Review",
+    "description": "Submit a written review for any dApp (rating + text).",
+    "type": "DAILY_REVIEW_ANY_DAPP",
+    "cadence": "DAILY",
+    "pointsReward": 25,
+    "targetCount": 1,
+    "isActive": true,
+    "actionUrl": "/#browse",
+    "actionUrlText": "Review a dApp"
+  }
+]

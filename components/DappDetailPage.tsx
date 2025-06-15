@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { ethers } from 'ethers';
-import { RateCaster } from '../RateCasterSDK/src';
+// import { RateCaster } from '../RateCasterSDK/src'; // SDK no longer directly used for data fetching here
 import { DappRegistered, DappReview, ProjectStats, getCategoryNameById } from '../types';
 import Spinner from './Spinner';
 import StarRating from './StarRating';
@@ -11,7 +11,7 @@ import { ExternalLinkIcon } from './icons/ExternalLinkIcon';
 import { ChatBubbleOvalLeftEllipsisIcon } from './icons/ChatBubbleOvalLeftEllipsisIcon';
 
 const API_BASE_URL = 'http://localhost:3001/api';
-const FRONTEND_RPC_URL = 'https://polygon-rpc.com'; // For SDK initialization
+// const FRONTEND_RPC_URL = 'https://polygon-rpc.com'; // No longer needed for SDK init here
 
 interface DappDetailPageProps {
   dappId: string;
@@ -41,44 +41,44 @@ const DappDetailPage: React.FC<DappDetailPageProps> = ({
     setReviews([]);
 
     try {
-      // Initialize SDK instance for this fetch operation
-      const provider = new ethers.JsonRpcProvider(FRONTEND_RPC_URL);
-      const sdkInstance = new RateCaster(provider);
-
-      // 1. Fetch DApp details using SDK
-      // getAllDapps(true) fetches aggregates like averageRating and totalReviews
-      const allDappsFromSDK = await sdkInstance.getAllDapps(true);
-      let foundDapp = allDappsFromSDK.find((d) => d.dappId === dappId);
-
-      if (!foundDapp) {
-        throw new Error('DApp not found via SDK.');
+      // 1. Fetch DApp details from backend API
+      const dappRes = await fetch(`${API_BASE_URL}/dapps/${dappId}`);
+      if (!dappRes.ok) {
+        const dappErrorText = await dappRes.text();
+        console.error('DApp detail fetch error response:', dappErrorText);
+        throw new Error(`Failed to fetch dApp details: ${dappRes.statusText} (Status: ${dappRes.status})`);
       }
-
-      // Ensure category name is populated using getCategoryNameById
-      if (foundDapp.categoryId && typeof foundDapp.category !== 'string') {
-        foundDapp.category = getCategoryNameById(foundDapp.categoryId);
+      const dappData: DappRegistered = await dappRes.json();
+      // Ensure category name is populated using getCategoryNameById if not already a string
+      if (dappData.categoryId && typeof dappData.category !== 'string') {
+        dappData.category = getCategoryNameById(dappData.categoryId);
       }
-      setDapp(foundDapp);
+      setDapp(dappData);
 
-      // 2. Fetch DApp statistics (including rating distribution) using SDK
-      const projectStats = await sdkInstance.getProjectStats(dappId);
-      setStats({ ...projectStats, dappId });
+      // 2. Fetch DApp statistics from backend API
+      const statsRes = await fetch(`${API_BASE_URL}/stats/dapp/${dappId}`);
+      if (!statsRes.ok) {
+        const statsErrorText = await statsRes.text();
+        console.error('Stats fetch error response:', statsErrorText);
+        throw new Error(`Failed to fetch dApp statistics: ${statsRes.statusText} (Status: ${statsRes.status})`);
+      }
+      const statsData: ProjectStats = await statsRes.json();
+      setStats(statsData);
 
-      // 3. Fetch DApp reviews from backend API (as requested)
+      // 3. Fetch DApp reviews from backend API
       const reviewsRes = await fetch(`${API_BASE_URL}/reviews/dapp/${dappId}`);
+      console.log('Fetching reviews from:', `${API_BASE_URL}/reviews/dapp/${dappId}`);
       if (!reviewsRes.ok) {
         const reviewErrorText = await reviewsRes.text();
         console.error('Review fetch error response:', reviewErrorText);
         throw new Error(`Failed to fetch dApp reviews: ${reviewsRes.statusText} (Status: ${reviewsRes.status})`);
       }
       const reviewsData: DappReview[] = await reviewsRes.json();
-      // Add dappName to reviews if missing, using the name from foundDapp
-      setReviews(reviewsData.map(r => ({ ...r, dappName: foundDapp!.name })));
+      setReviews(reviewsData.map(r => ({ ...r, dappName: dappData.name }))); // Use name from fetched dappData
 
     } catch (err: any) {
       console.error('Error fetching dApp page data:', err);
       setPageError(err.message || 'Failed to load dApp information.');
-      // Ensure states are cleared on error
       setDapp(null); 
       setStats(null);
       setReviews([]);

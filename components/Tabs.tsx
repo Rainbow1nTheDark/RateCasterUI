@@ -1,23 +1,28 @@
+
+
 import React from 'react';
 import { EyeIcon } from './icons/EyeIcon';
 import { PlusCircleIcon } from './icons/PlusCircleIcon';
 import { ChatBubbleLeftRightIcon } from './icons/ChatBubbleLeftRightIcon';
-import { TrophyIcon } from './icons/TrophyIcon'; // New Icon
+import { TrophyIcon } from './icons/TrophyIcon';
+import { QuestsIcon } from './icons/QuestsIcon'; // New Icon
 
-export type ActiveTab = 'browse' | 'add' | 'edit' | 'reviews' | 'leaderboard'; // Added 'leaderboard'
+export type ActiveTab = 'browse' | 'add' | 'edit' | 'reviews' | 'leaderboard' | 'quests'; // Added 'quests'
 
 interface TabsProps {
   activeTab: ActiveTab;
   isLoading: boolean;
   setActiveTab: (tab: ActiveTab) => void;
+  userAddress?: string | null; // Added to accept userAddress prop
 }
 
-const Tabs: React.FC<TabsProps> = ({ activeTab, isLoading, setActiveTab }) => {
+const Tabs: React.FC<TabsProps> = ({ activeTab, isLoading, setActiveTab, userAddress }) => {
   const tabsConfig: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
     { id: 'browse', label: 'Browse Dapps', icon: <EyeIcon className="w-5 h-5 mr-2"/> },
-    { id: 'add', label: 'Add Dapp', icon: <PlusCircleIcon className="w-5 h-5 mr-2"/> },
+    { id: 'quests', label: 'Quests', icon: <QuestsIcon className="w-5 h-5 mr-2"/> }, // New Tab
     { id: 'reviews', label: 'My Reviews', icon: <ChatBubbleLeftRightIcon className="w-5 h-5 mr-2"/> },
-    { id: 'leaderboard', label: 'Leaderboard', icon: <TrophyIcon className="w-5 h-5 mr-2"/> }, // New Tab
+    { id: 'leaderboard', label: 'Leaderboard', icon: <TrophyIcon className="w-5 h-5 mr-2"/> },
+    { id: 'add', label: 'Add Dapp', icon: <PlusCircleIcon className="w-5 h-5 mr-2"/> },
   ];
 
   return (
@@ -28,6 +33,8 @@ const Tabs: React.FC<TabsProps> = ({ activeTab, isLoading, setActiveTab }) => {
           onClick={() => {
             if (tab.id !== 'edit') setActiveTab(tab.id)
           }}
+          // Example of how userAddress could be used for conditional disabling (not in original logic, but prop is now available)
+          // disabled={isLoading || tab.id === 'edit' || (tab.id === 'add' && !userAddress)}
           disabled={isLoading || tab.id === 'edit'} // 'edit' tab is programmatic
           className={`px-3 py-2 sm:px-5 sm:py-2.5 rounded-lg text-xs sm:text-sm font-medium flex items-center transition-all duration-150
             ${activeTab === tab.id 

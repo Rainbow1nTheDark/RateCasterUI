@@ -1,7 +1,7 @@
 // Based on SDK types
 export interface ChainInfo {
   chainId: number;
-  name: string; // Corrected from String to string
+  name: string; 
   graphqlUrl: string;
   contractAddress: string;
   explorer: string;
@@ -14,8 +14,8 @@ export interface DappReview {
   starRating: number;
   rater: string;
   reviewText: string;
-  dappName?: string; // Added for frontend display convenience
-  timestamp?: number; // Added for sorting/display
+  dappName?: string; 
+  timestamp?: number; 
 }
 
 export interface DappRegistered {
@@ -42,9 +42,9 @@ export interface UserProfile {
   address: string;
   points: number;
   reviewStreak: number;
-  lastLoginTimestamp: number; // Timestamp of last login
-  lastReviewTimestamp: number; // Timestamp of last review for streak calculation
-  username?: string; // Optional: could be ENS or a chosen display name
+  lastLoginTimestamp: number; 
+  lastReviewTimestamp: number; 
+  username?: string; 
 }
 
 export interface LeaderboardEntry {
@@ -66,6 +66,42 @@ export interface ProjectStats {
     '4': number;
     '5': number;
   };
+}
+
+// --- Enhanced Task System Types ---
+export enum TaskType {
+  DAILY_LOGIN = 'DAILY_LOGIN',
+  DAILY_RATE_ANY_DAPP = 'DAILY_RATE_ANY_DAPP',
+  DAILY_REVIEW_ANY_DAPP = 'DAILY_REVIEW_ANY_DAPP',
+  // Example for future weekly task
+  // WEEKLY_REVIEW_X_DAPPS = 'WEEKLY_REVIEW_X_DAPPS', 
+}
+
+export enum TaskCadence {
+  DAILY = 'DAILY',
+  WEEKLY = 'WEEKLY',
+  ONCE = 'ONCE', // For one-time tasks/achievements
+}
+
+export interface TaskDefinition {
+  taskId: string;          // Unique identifier for the task
+  title: string;           // User-facing title (e.g., "Daily Check-in")
+  description: string;     // User-facing description
+  type: TaskType;          // Programmatic type for logic
+  cadence: TaskCadence;    // How often it resets (DAILY, WEEKLY)
+  pointsReward: number;    // Points awarded upon completion
+  targetCount: number;     // How many times action needs to be performed (e.g., 1 for daily login, 3 for "review 3 dapps")
+  isActive: boolean;       // Whether the task is currently active
+  actionUrl?: string;      // Optional URL for the user to perform the task (e.g., '/browse' for rating)
+  actionUrlText?: string;  // Text for the action URL button (e.g., "Rate a dApp")
+}
+
+export interface UserTaskProgressEntry {
+  taskId: string;
+  currentCount: number;       // How many times user has performed the action in current period
+  lastProgressTimestamp: number; // Timestamp of the last progress update for this period
+  isCompletedThisPeriod: boolean; // Has the task been completed in the current period?
+  // lastClaimedTimestamp?: number; // If manual claiming is implemented
 }
 
 
@@ -263,4 +299,52 @@ export const getCategoryNameById = (categoryId: number): string => {
   const categoryName = CATEGORY_NAMES[categoryId];
   if (categoryName) return categoryName;
   return `Unknown (${categoryId})`;
+};
+
+// --- Rater League System ---
+export enum RaterLeague {
+  BRONZE = "Bronze",
+  SILVER = "Silver",
+  GOLD = "Gold",
+  PLATINUM = "Platinum",
+  DIAMOND = "Diamond",
+}
+
+export interface RankInfo {
+  league: RaterLeague;
+  iconColor: string; // Tailwind color class e.g., 'text-yellow-500'
+  minPoints: number;
+  nextLeague?: RaterLeague;
+  nextLeaguePoints?: number;
+  progressPercentage?: number;
+}
+
+const LEAGUE_THRESHOLDS: Array<Omit<RankInfo, 'nextLeague' | 'nextLeaguePoints' | 'progressPercentage'>> = [
+  { league: RaterLeague.BRONZE, iconColor: 'text-orange-400', minPoints: 0 }, // Adjusted color for bronze
+  { league: RaterLeague.SILVER, iconColor: 'text-neutral-400', minPoints: 250 },
+  { league: RaterLeague.GOLD, iconColor: 'text-yellow-500', minPoints: 750 },
+  { league: RaterLeague.PLATINUM, iconColor: 'text-sky-400', minPoints: 1500 },
+  { league: RaterLeague.DIAMOND, iconColor: 'text-purple-500', minPoints: 3000 },
+];
+
+export const getRankAndLeague = (points: number): RankInfo => {
+  let currentRank: RankInfo = { ...LEAGUE_THRESHOLDS[0] }; // Default to Bronze
+
+  for (let i = LEAGUE_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (points >= LEAGUE_THRESHOLDS[i].minPoints) {
+      currentRank = { ...LEAGUE_THRESHOLDS[i] };
+      const nextRankIndex = i + 1;
+      if (nextRankIndex < LEAGUE_THRESHOLDS.length) {
+        currentRank.nextLeague = LEAGUE_THRESHOLDS[nextRankIndex].league;
+        currentRank.nextLeaguePoints = LEAGUE_THRESHOLDS[nextRankIndex].minPoints;
+        const pointsInCurrentTier = points - currentRank.minPoints;
+        const pointsForNextTier = currentRank.nextLeaguePoints - currentRank.minPoints;
+        currentRank.progressPercentage = Math.min(100, Math.max(0, (pointsInCurrentTier / pointsForNextTier) * 100));
+      } else { // Highest rank
+        currentRank.progressPercentage = 100;
+      }
+      break;
+    }
+  }
+  return currentRank;
 };
