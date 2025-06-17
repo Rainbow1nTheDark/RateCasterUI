@@ -1,6 +1,6 @@
 // walletConfig.ts
 import { createConfig, http } from 'wagmi';
-import { polygon } from 'wagmi/chains';
+import { polygon, polygonAmoy } from 'wagmi/chains';
 import { walletConnect, injected, metaMask } from 'wagmi/connectors';
 
 // WalletConnect Project ID (get from https://cloud.walletconnect.com)
@@ -20,4 +20,4 @@ export const wagmiConfig = createConfig({
 });
 
 // Export chains for RainbowKitProvider
-export const supportedChains = [polygon];
+export const supportedChains = [polygon, polygonAmoy];

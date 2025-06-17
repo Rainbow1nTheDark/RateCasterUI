@@ -120,7 +120,7 @@ const App: React.FC = () => {
         if (!hasInitialDataLoadedOnce) {
              setIsCoreDataLoading(false);
              setHasInitialDataLoadedOnce(true);
-        } else if (showLoadingIndicator) {
+        } else if (showLoadingIndicator) { 
              setIsCoreDataLoading(false); 
         }
     }
@@ -128,10 +128,8 @@ const App: React.FC = () => {
 
 
   useEffect(() => {
-    // Initialize socket connection
     const newSocketInstance = io(SOCKET_SERVER_URL, {
-      transports: ['websocket', 'polling'], // Optional: specify transports
-      // autoConnect: false, // Optional: manage connection manually
+      transports: ['websocket', 'polling'],
     });
     setSocket(newSocketInstance);
 
@@ -141,7 +139,7 @@ const App: React.FC = () => {
         if (wagmiAddress) {
             newSocketInstance.emit('authenticate', wagmiAddress);
         }
-        if (!hasInitialDataLoadedOnce || dapps.length === 0) { 
+        if (!hasInitialDataLoadedOnce) { 
             refreshDappsAndReviews(true);
         }
     };
@@ -162,12 +160,9 @@ const App: React.FC = () => {
                 newDapps[index] = populatedDapp;
                 return newDapps;
             }
-            return [populatedDapp, ...prevDapps];
+            return [populatedDapp, ...prevDapps]; 
         });
         if (selectedDapp?.dappId === updatedDapp.dappId) setSelectedDapp({ ...updatedDapp, category: getCategoryNameById(updatedDapp.categoryId) });
-        if (selectedDappIdForDetailPage === updatedDapp.dappId) {
-            
-        }
     };
     
     const handleNewReviewEvent = (review: AppDappReview) => {
@@ -178,7 +173,6 @@ const App: React.FC = () => {
             setUserReviews(prev => [review, ...prev.filter(r => r.id !== review.id)].sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0)));
         }
         setAllReviews(prev => [review, ...prev.filter(r => r.id !== review.id)].sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0)));
-        
     };
 
     const handleBackendError = (errorMessage: string) => {
@@ -199,8 +193,6 @@ const App: React.FC = () => {
     newSocketInstance.on('backend_error', handleBackendError);
     newSocketInstance.on('disconnect', handleDisconnect);
 
-    // newSocketInstance.connect(); // If autoConnect is false
-
     return () => {
       console.log('[FE INFO] Socket.IO: Removing event listeners on cleanup...');
       newSocketInstance.off('connect', handleConnect);
@@ -211,7 +203,7 @@ const App: React.FC = () => {
       newSocketInstance.off('disconnect', handleDisconnect);
       if (newSocketInstance.connected) newSocketInstance.disconnect();
     };
-  }, [wagmiAddress, refreshDappsAndReviews, userAddress, selectedDapp?.dappId, selectedDappIdForDetailPage, hasInitialDataLoadedOnce, dapps.length]);
+  }, [wagmiAddress, refreshDappsAndReviews, hasInitialDataLoadedOnce, userAddress]); // Refined dependencies
 
 
   const connectWalletAsync = useCallback(async () => {
@@ -230,11 +222,12 @@ const App: React.FC = () => {
         setAppStatus(`Switching to Polygon...`);
         await switchChainAsync({ chainId: wagmiPolygon.id });
         
-         const updatedWalletClient = await queryClientTanstack.fetchQuery({ 
-          queryKey: ['walletClient', wagmiAddress, wagmiPolygon.id], 
-          queryFn: () => walletClient 
+        const updatedWalletClientAfterSwitch = await queryClientTanstack.fetchQuery({ 
+            queryKey: ['walletClient', wagmiAddress, wagmiPolygon.id], 
+            queryFn: () => walletClient 
         });
-        if (!updatedWalletClient || updatedWalletClient.chain.id !== wagmiPolygon.id) {
+
+        if (!updatedWalletClientAfterSwitch || updatedWalletClientAfterSwitch.chain.id !== wagmiPolygon.id) {
            throw new Error('Failed to switch to Polygon network or wallet client not updated.');
         }
       } else if (wagmiChain?.id !== wagmiPolygon.id) {
@@ -245,12 +238,10 @@ const App: React.FC = () => {
       const signerInstance = await provider.getSigner();
       setCurrentSigner(signerInstance);
       setUserAddress(wagmiAddress);
-      setCurrentChainName(wagmiChain?.name || 'Polygon');
-      setAppStatus(`Wallet Connected`); // Simplified status
+      setCurrentChainName(wagmiChain?.name || 'Polygon'); 
+      setAppStatus(`Wallet Connected`); 
       console.log(`[FE INFO] Wallet Connected: ${wagmiAddress}`);
 
-
-      
       const profileRes = await fetch(`${API_BASE_URL}/actions/wallet-connected`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -260,7 +251,7 @@ const App: React.FC = () => {
       const profileData: AppUserProfile = await profileRes.json();
       setUserProfile(profileData);
       
-      if (socket && socket.connected) {
+      if (socket && socket.connected) { 
          socket.emit('authenticate', wagmiAddress);
       }
       
@@ -281,10 +272,9 @@ const App: React.FC = () => {
   }, [isWagmiConnected, wagmiAddress, wagmiChain, walletClient, switchChainAsync, socket, dapps]);
 
   useEffect(() => {
-    if (isWagmiConnected && wagmiAddress && walletClient && !userAddress) {
+    if (isWagmiConnected && wagmiAddress && walletClient && !userAddress) { 
       connectWalletAsync();
-    } else if (!isWagmiConnected && userAddress) {
-      
+    } else if (!isWagmiConnected && userAddress) { 
       setUserAddress(null);
       setCurrentSigner(null);
       setUserProfile(null);
@@ -293,15 +283,15 @@ const App: React.FC = () => {
       setError('');
       setActiveTab('browse');
     }
+
      if (isWagmiConnected && wagmiChain) {
         setCurrentChainName(wagmiChain.name);
         if (wagmiChain.id !== wagmiPolygon.id) {
             setAppStatus('Error: Wrong network');
             setError(`Please switch to Polygon. Connected to ${wagmiChain.name}.`);
-        } else if (error.includes("Polygon")) { 
+        } else if (error.includes("Polygon") || error.includes("network")) { 
             setError('');
-             // Set appStatus to a neutral connected state if error was about wrong network and is now resolved
-            if(appStatus === 'Error: Wrong network') setAppStatus('Wallet Connected');
+            if(appStatus.startsWith('Error:')) setAppStatus('Wallet Connected'); 
         }
     }
   }, [isWagmiConnected, wagmiAddress, wagmiChain, walletClient, userAddress, connectWalletAsync, error, appStatus]);
@@ -328,26 +318,27 @@ const App: React.FC = () => {
 
   const ensureWalletConnected = async (): Promise<ethers.Signer | null> => {
     if (currentSigner && userAddress && wagmiChain?.id === wagmiPolygon.id) return currentSigner;
+    
     setError('Wallet not connected or on wrong network. Please connect to Polygon.');
     setAppStatus('Error: Wallet connection issue');
-    
-    
+        
     if (isWagmiConnected && wagmiAddress && walletClient) {
         if (wagmiChain?.id !== wagmiPolygon.id) {
             if (switchChainAsync) {
                 try {
+                    setAppStatus('Requesting network switch to Polygon...');
                     await switchChainAsync({ chainId: wagmiPolygon.id });
-                     const updatedWalletClient = await queryClientTanstack.fetchQuery({ 
+                    const updatedWC = await queryClientTanstack.fetchQuery({ 
                         queryKey: ['walletClient', wagmiAddress, wagmiPolygon.id], 
                         queryFn: () => walletClient 
                     });
-                    if (!updatedWalletClient || updatedWalletClient.chain.id !== wagmiPolygon.id) {
-                        throw new Error('Failed to switch to Polygon network or wallet client not updated.');
+                    if (!updatedWC || updatedWC.chain.id !== wagmiPolygon.id) {
+                         throw new Error('Network switch to Polygon not confirmed or wallet client not updated.');
                     }
-                    const provider = new ethers.BrowserProvider(updatedWalletClient as any); 
+                    const provider = new ethers.BrowserProvider(updatedWC as any); 
                     const signerInstance = await provider.getSigner();
                     setCurrentSigner(signerInstance);
-                    setUserAddress(wagmiAddress);
+                    setUserAddress(wagmiAddress); 
                     setCurrentChainName(wagmiPolygon.name);
                     setError(''); 
                     setAppStatus(`Wallet Connected`);
@@ -355,23 +346,25 @@ const App: React.FC = () => {
                     return signerInstance;
                 } catch (switchError: any) {
                     setError(`Network switch failed: ${switchError.message}`);
+                    setAppStatus('Error: Network switch failed');
                     return null;
                 }
             } else {
                  setError('Please switch to Polygon network in your wallet.');
+                 setAppStatus('Error: Manual network switch required');
                  return null;
             }
         }
-        
         const provider = new ethers.BrowserProvider(walletClient as any); 
         const signerInstance = await provider.getSigner();
         setCurrentSigner(signerInstance);
-        setUserAddress(wagmiAddress);
+        setUserAddress(wagmiAddress); 
         setError(''); 
         setAppStatus(`Wallet Connected`);
         console.log(`[FE INFO] Wallet re-verified`);
         return signerInstance;
     }
+    if (!isWagmiConnected) setError("Please connect your wallet using the 'Connect Wallet' button.");
     return null; 
   };
 
@@ -395,7 +388,6 @@ const App: React.FC = () => {
 
     setIsTxLoading(true); setError('');
     try {
-      
       const calculatedDappId = ethers.keccak256(ethers.toUtf8Bytes(newDappData.url!));
 
       const txResponse = await sdk.registerDapp(
@@ -406,7 +398,6 @@ const App: React.FC = () => {
       console.log(`Registering ${newDappData.name}... (Tx: ${txResponse.hash})`);
       await txResponse.wait(); 
       setAppStatus(`DApp ${newDappData.name} registered!`);
-      
       
       await fetch(`${API_BASE_URL}/actions/refresh-dapp-from-chain`, {
         method: 'POST',
@@ -468,7 +459,6 @@ const App: React.FC = () => {
   const openRatingModalForDapp = (dappId: string) => {
     if (!userAddress) {
       setError("Please connect your wallet to rate dApps.");
-      
       return;
     }
     const dappToRate = dapps.find(d => d.dappId === dappId);
@@ -505,17 +495,19 @@ const App: React.FC = () => {
       await txResponse.wait();
       setAppStatus('Review submitted successfully!');
       
-      
-      
       setRatingModalOpen(false);
       setReviewData({ rating: 5 }); 
 
-      
       if (userAddress) { 
           setIsProfileLoading(true);
-          const profileRes = await fetch(`${API_BASE_URL}/users/profile/${userAddress}`);
-          if (profileRes.ok) setUserProfile(await profileRes.json());
-          setIsProfileLoading(false);
+          try {
+            const profileRes = await fetch(`${API_BASE_URL}/users/profile/${userAddress}`);
+            if (profileRes.ok) setUserProfile(await profileRes.json());
+          } catch (profileFetchError) {
+            console.warn("Failed to immediately refetch profile after review submission:", profileFetchError);
+          } finally {
+            setIsProfileLoading(false);
+          }
       }
 
     } catch (err: any) {
@@ -558,7 +550,7 @@ const App: React.FC = () => {
               <h1 className="text-4xl sm:text-5xl font-bold text-yellow-500 mb-2 sm:mb-0">RateCaster</h1>
           </div>
           <StatusBar 
-            appStatus={appStatus}
+            appStatus={appStatus} 
             userAddress={userAddress} 
             userProfile={userProfile}
             isLoading={isCoreDataLoading && !hasInitialDataLoadedOnce} 
@@ -584,7 +576,6 @@ const App: React.FC = () => {
           setActiveTab={setActiveTab} 
         />
         
-        
         <main>
           {activeTab === 'browse' && (
             <>
@@ -600,15 +591,14 @@ const App: React.FC = () => {
                         <option key={cat.label} value={cat.label}>{cat.label}</option>
                     ))}
                 </select>
-                <div className="flex-grow hidden sm:block"></div> 
-                {/* UserProfileDisplay removed from here */}
+                <div className="flex-grow hidden sm:block"></div>
               </div>
-              {isCoreDataLoading && dapps.length === 0 ? (
+              {isCoreDataLoading && dapps.length === 0 && !hasInitialDataLoadedOnce ? ( 
                 <div className="flex flex-col items-center justify-center h-64">
                   <Spinner size="lg" />
                   <p className="mt-4 text-neutral-400">Loading dApps...</p>
                 </div>
-              ) : filteredDapps.length === 0 && !isCoreDataLoading ? (
+              ) : filteredDapps.length === 0 && hasInitialDataLoadedOnce ? ( 
                 <p className="text-center text-neutral-400 py-10">No dApps found for this category or matching your search.</p>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -676,5 +666,4 @@ const App: React.FC = () => {
     </div>
   );
 };
-
 export default App;

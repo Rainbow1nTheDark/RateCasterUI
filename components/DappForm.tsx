@@ -31,6 +31,9 @@ const DappForm: React.FC<DappFormProps> = ({
   const currentDappData = activeTab === 'edit' ? selectedDapp : newDapp;
   const handleSubmit = activeTab === 'edit' ? handleUpdateDapp : handleRegisterDapp;
 
+  // Get unique group names for optgroup
+  const uniqueGroupNames = Array.from(new Set(categoryOptions.map(opt => opt.group))).sort();
+
   return (
     <div className="max-w-2xl mx-auto p-6 sm:p-8 bg-neutral-800 rounded-xl shadow-xl">
       <h2 className="text-2xl sm:text-3xl font-semibold text-yellow-500 mb-6 text-center">
@@ -100,10 +103,12 @@ const DappForm: React.FC<DappFormProps> = ({
             className="w-full px-4 py-2.5 bg-neutral-700 border border-neutral-600 rounded-lg text-neutral-100 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 outline-none transition-colors"
           >
             <option value="" disabled>Select a category</option>
-            {categoryOptions.map(optgroup => (
-              <optgroup key={optgroup.group} label={optgroup.group}>
-                 {categoryOptions.filter(option => option.group === optgroup.group).map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
+            {uniqueGroupNames.map(groupName => (
+              <optgroup key={groupName} label={groupName}>
+                 {categoryOptions
+                    .filter(option => option.group === groupName)
+                    .map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
                  ))}
               </optgroup>
             ))}
