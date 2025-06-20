@@ -25,4 +25,4 @@ dist-ssr
 
 # Dependency directories
 RateCasterSDK
-user_profiles.json
+.env

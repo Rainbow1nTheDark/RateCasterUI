@@ -28,16 +28,14 @@ import {
 // --- Configuration ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const RPC_URL = 'https://polygon-rpc.com';
+const RPC_URL = process.env.RPC_URL || 'https://polygon-rpc.com'; // Default to Polygon mainnet RPC
 const WEBSOCKET_URL = process.env.WEBSOCKET_URL || 'wss://polygon-mainnet.g.alchemy.com/v2/8df5Ufs4d85WriX-pY383TTWk740Q0P0';
-const CHAIN_ID = 137;
 const PORT = Number(process.env.PORT) || 3001;
 const DB_FILE_PATH = process.env.DB_FILE_PATH || path.join(__dirname, 'user_profiles.json');
 const TASKS_DEFINITIONS_PATH = path.join(__dirname, 'tasks-definitions.json');
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "SUPER_SECRET_ADMIN_KEY";
 
 const POINTS_STREAK_BONUS_PER_DAY = 5;
-const CONTRACT_ADDRESS = process.env.RATECASTER_CONTRACT_ADDRESS || 'YOUR_CONTRACT_ADDRESS';
 
 // --- In-memory Data Stores (Cache) ---
 let dappsStore: FrontendDappRegistered[] = [];
@@ -133,9 +131,6 @@ async function initializeSDK(): Promise<RateCaster> {
         logger.warn('WebSocket URL not configured, is a placeholder, or empty. Real-time event listening will be impaired.');
         wsProviderInitialized = false;
     }
-    if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === 'YOUR_CONTRACT_ADDRESS') {
-        logger.warn('Contract address not configured. Ensure RATECASTER_CONTRACT_ADDRESS is set in .env.');
-    }
 
     const httpProvider = new ethers.JsonRpcProvider(RPC_URL);
     let wsProvider;
@@ -160,13 +155,6 @@ async function initializeSDK(): Promise<RateCaster> {
 
 
     const sdk = new RateCaster(httpProvider, wsProvider); // Pass potentially null wsProvider
-    try {
-        // Log contract address if available (it's set in constructor)
-        logger.info('RateCaster SDK instance created with contract address:', CONTRACT_ADDRESS);
-    } catch (error) {
-        logger.error('SDK instance creation failed:', error);
-        throw error; // Rethrow if constructor itself fails
-    }
 
     ratecasterSDKInstance = sdk;
     sdkInitialized = true;
