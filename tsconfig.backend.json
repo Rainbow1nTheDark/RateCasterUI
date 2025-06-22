@@ -9,6 +9,6 @@
     "outDir": "./dist",
     "rootDir": "."
   },
-  "include": ["backend-service.ts", "RateCasterSDK/**/*"],
+  "include": ["backend-service.ts"],
   "exclude": ["node_modules", "src"]
 }

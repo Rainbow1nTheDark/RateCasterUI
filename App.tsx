@@ -20,7 +20,7 @@ import LeaderboardTab from './components/LeaderboardTab';
 import QuestsTab from './components/QuestsTab'; 
 import DappDetailPage from './components/DappDetailPage';
 import { ExclamationTriangleIcon } from './components/icons/ExclamationTriangleIcon';
-import { RateCaster } from './RateCasterSDK/src';
+import { RateCaster } from '@ratecaster/sdk';
 
 import '@rainbow-me/rainbowkit/styles.css';
 import { polygon as wagmiPolygon } from 'wagmi/chains'; 

@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { ethers } from 'ethers';
-import { RateCaster, DappRegistered as SDKDappRegistered, DappReview as SDKDappReview } from './RateCasterSDK/src';
+import { RateCaster, DappRegistered as SDKDappRegistered, DappReview as SDKDappReview } from '@ratecaster/sdk';
 import http from 'http';
 import fs from 'fs/promises';
 import path from 'path';
