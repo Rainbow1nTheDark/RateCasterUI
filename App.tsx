@@ -21,11 +21,13 @@ import QuestsTab from './components/QuestsTab';
 import DappDetailPage from './components/DappDetailPage';
 import { ExclamationTriangleIcon } from './components/icons/ExclamationTriangleIcon';
 import { RateCaster } from '@ratecaster/sdk';
+import { Chatbot } from './components/Chatbot';
+import { ChatBubbleLeftRightIcon } from './components/icons/ChatBubbleLeftRightIcon';
 
 import '@rainbow-me/rainbowkit/styles.css';
 import { polygon as wagmiPolygon } from 'wagmi/chains'; 
 
-const API_BASE_URL = 'https://app.ratecaster.xyz/api';
+const API_BASE_URL = 'http://localhost:3001/api';
 const SOCKET_SERVER_URL = 'https://app.ratecaster.xyz'; // URL for Socket.IO connection
 const FRONTEND_RPC_URL = 'https://polygon-rpc.com'; 
 
@@ -65,6 +67,8 @@ const App: React.FC = () => {
   const { address: wagmiAddress, isConnected: isWagmiConnected, chain: wagmiChain } = useAccount();
   const { switchChainAsync } = useSwitchChain();
   const { data: walletClient } = useWalletClient();
+
+  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
   const CombinedLoading = isCoreDataLoading || isTxLoading || isProfileLoading;
 
@@ -531,126 +535,126 @@ const App: React.FC = () => {
     ? dapps.filter(dapp => getCategoryNameById(dapp.categoryId).includes(selectedCategory)) 
     : dapps;
 
-  if (selectedDappIdForDetailPage) {
-    return (
-      <DappDetailPage
-        dappId={selectedDappIdForDetailPage}
-        onBack={handleBackFromDetailPage}
-        openRatingModal={openRatingModalForDapp}
-        userAddress={userAddress}
-      />
-    );
-  }
-
   return (
     <div className="min-h-screen bg-neutral-900 text-neutral-200">
       <div className="container mx-auto px-4 py-6 sm:px-6 lg:px-8">
-        <header className="mb-6">
-          <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
-              <h1 className="text-4xl sm:text-5xl font-bold text-yellow-500 mb-2 sm:mb-0">RateCaster</h1>
-          </div>
-          <StatusBar 
-            appStatus={appStatus} 
-            userAddress={userAddress} 
-            userProfile={userProfile}
-            isLoading={isCoreDataLoading && !hasInitialDataLoadedOnce} 
-            currentChainName={currentChainName}
-            setActiveTab={setActiveTab}
+        {selectedDappIdForDetailPage ? (
+          <DappDetailPage
+            dappId={selectedDappIdForDetailPage}
+            onBack={handleBackFromDetailPage}
+            openRatingModal={openRatingModalForDapp}
+            userAddress={userAddress}
           />
-        </header>
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-700/30 border border-red-600 text-red-300 rounded-lg flex items-center">
-            <ExclamationTriangleIcon className="w-5 h-5 mr-2 text-red-400" />
-            <span>{error}</span>
-            <button onClick={() => setError('')} className="ml-auto text-red-300 hover:text-red-100 text-lg">&times;</button>
-          </div>
-        )}
-        
-        <Notification review={newReviewNotification} onClose={() => setNewReviewNotification(null)} />
-
-        <Tabs 
-          activeTab={activeTab} 
-          isLoading={isCoreDataLoading && !hasInitialDataLoadedOnce} 
-          userAddress={userAddress} 
-          setActiveTab={setActiveTab} 
-        />
-        
-        <main>
-          {activeTab === 'browse' && (
-            <>
-              <div className="mb-6 flex flex-col sm:flex-row gap-4 items-center">
-                <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="flex-grow sm:flex-grow-0 sm:w-1/3 px-4 py-2.5 bg-neutral-700 border border-neutral-600 rounded-lg text-neutral-100 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 outline-none"
-                    aria-label="Filter by category group"
-                >
-                    <option value="">All Category Groups</option>
-                    {categoriesForFilter.map(cat => (
-                        <option key={cat.label} value={cat.label}>{cat.label}</option>
-                    ))}
-                </select>
-                <div className="flex-grow hidden sm:block"></div>
+        ) : (
+          <>
+            <header className="mb-6">
+              <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
+                  <h1 className="text-4xl sm:text-5xl font-bold text-yellow-500 mb-2 sm:mb-0">RateCaster</h1>
               </div>
-              {isCoreDataLoading && dapps.length === 0 && !hasInitialDataLoadedOnce ? ( 
-                <div className="flex flex-col items-center justify-center h-64">
-                  <Spinner size="lg" />
-                  <p className="mt-4 text-neutral-400">Loading dApps...</p>
-                </div>
-              ) : filteredDapps.length === 0 && hasInitialDataLoadedOnce ? ( 
-                <p className="text-center text-neutral-400 py-10">No dApps found for this category or matching your search.</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {filteredDapps.map((dapp) => (
-                    <DappCard
-                      key={dapp.dappId}
-                      dapp={dapp}
-                      isLoading={isTxLoading}
-                      userAddress={userAddress}
-                      startEditDapp={startEditDapp}
-                      openRatingModal={openRatingModalForDapp}
-                      onNavigateToDetail={handleNavigateToDappDetail}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
+              <StatusBar 
+                appStatus={appStatus} 
+                userAddress={userAddress} 
+                userProfile={userProfile}
+                isLoading={isCoreDataLoading && !hasInitialDataLoadedOnce} 
+                currentChainName={currentChainName}
+                setActiveTab={setActiveTab}
+              />
+            </header>
 
-          {(activeTab === 'add' || activeTab === 'edit') && (
-            <DappForm
-              activeTab={activeTab}
-              selectedDapp={selectedDapp}
-              newDapp={newDappData}
-              categoryOptions={categoryOptions}
-              isLoading={isTxLoading}
-              handleDappFormChange={handleDappFormChange}
-              handleRegisterDapp={handleRegisterDapp}
-              handleUpdateDapp={handleUpdateDapp}
-              setActiveTab={setActiveTab}
-              setSelectedDapp={setSelectedDapp}
+            {error && (
+              <div className="mb-4 p-3 bg-red-700/30 border border-red-600 text-red-300 rounded-lg flex items-center">
+                <ExclamationTriangleIcon className="w-5 h-5 mr-2 text-red-400" />
+                <span>{error}</span>
+                <button onClick={() => setError('')} className="ml-auto text-red-300 hover:text-red-100 text-lg">&times;</button>
+              </div>
+            )}
+            
+            <Notification review={newReviewNotification} onClose={() => setNewReviewNotification(null)} />
+
+            <Tabs 
+              activeTab={activeTab} 
+              isLoading={isCoreDataLoading && !hasInitialDataLoadedOnce} 
+              userAddress={userAddress} 
+              setActiveTab={setActiveTab} 
             />
-          )}
+            
+            <main>
+              {activeTab === 'browse' && (
+                <>
+                  <div className="mb-6 flex flex-col sm:flex-row gap-4 items-center">
+                    <select
+                        value={selectedCategory}
+                        onChange={(e) => setSelectedCategory(e.target.value)}
+                        className="flex-grow sm:flex-grow-0 sm:w-1/3 px-4 py-2.5 bg-neutral-700 border border-neutral-600 rounded-lg text-neutral-100 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 outline-none"
+                        aria-label="Filter by category group"
+                    >
+                        <option value="">All Category Groups</option>
+                        {categoriesForFilter.map(cat => (
+                            <option key={cat.label} value={cat.label}>{cat.label}</option>
+                        ))}
+                    </select>
+                    <div className="flex-grow hidden sm:block"></div>
+                  </div>
+                  {isCoreDataLoading && dapps.length === 0 && !hasInitialDataLoadedOnce ? ( 
+                    <div className="flex flex-col items-center justify-center h-64">
+                      <Spinner size="lg" />
+                      <p className="mt-4 text-neutral-400">Loading dApps...</p>
+                    </div>
+                  ) : filteredDapps.length === 0 && hasInitialDataLoadedOnce ? ( 
+                    <p className="text-center text-neutral-400 py-10">No dApps found for this category or matching your search.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                      {filteredDapps.map((dapp) => (
+                        <DappCard
+                          key={dapp.dappId}
+                          dapp={dapp}
+                          isLoading={isTxLoading}
+                          userAddress={userAddress}
+                          startEditDapp={startEditDapp}
+                          openRatingModal={openRatingModalForDapp}
+                          onNavigateToDetail={handleNavigateToDappDetail}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
 
-          {activeTab === 'reviews' && (
-            userAddress ? (
-              userReviews.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {userReviews.map((review) => (
-                    <ReviewCard key={review.id || review.attestationId} review={review} />
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-neutral-400 py-10">You haven't submitted any reviews yet.</p>
-              )
-            ) : (
-              <p className="text-center text-neutral-400 py-10">Connect your wallet to see your reviews.</p>
-            )
-          )}
-          {activeTab === 'leaderboard' && <LeaderboardTab />}
-          {activeTab === 'quests' && <QuestsTab userAddress={userAddress} />}
-        </main>
+              {(activeTab === 'add' || activeTab === 'edit') && (
+                <DappForm
+                  activeTab={activeTab}
+                  selectedDapp={selectedDapp}
+                  newDapp={newDappData}
+                  categoryOptions={categoryOptions}
+                  isLoading={isTxLoading}
+                  handleDappFormChange={handleDappFormChange}
+                  handleRegisterDapp={handleRegisterDapp}
+                  handleUpdateDapp={handleUpdateDapp}
+                  setActiveTab={setActiveTab}
+                  setSelectedDapp={setSelectedDapp}
+                />
+              )}
+
+              {activeTab === 'reviews' && (
+                userAddress ? (
+                  userReviews.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                      {userReviews.map((review) => (
+                        <ReviewCard key={review.id || review.attestationId} review={review} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-center text-neutral-400 py-10">You haven't submitted any reviews yet.</p>
+                  )
+                ) : (
+                  <p className="text-center text-neutral-400 py-10">Connect your wallet to see your reviews.</p>
+                )
+              )}
+              {activeTab === 'leaderboard' && <LeaderboardTab />}
+              {activeTab === 'quests' && <QuestsTab userAddress={userAddress} />}
+            </main>
+          </>
+        )}
       </div>
 
       <RatingModal
@@ -663,6 +667,16 @@ const App: React.FC = () => {
         handleSubmitReview={handleSubmitReview}
         setRatingModalOpen={setRatingModalOpen}
       />
+
+      {isChatbotOpen && <Chatbot onClose={() => setIsChatbotOpen(false)} onNavigateToDetail={handleNavigateToDappDetail} />}
+
+      <button
+        onClick={() => setIsChatbotOpen(prev => !prev)}
+        className="fixed bottom-4 right-4 bg-yellow-500 text-neutral-900 p-4 rounded-full shadow-lg hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 z-40"
+        aria-label="Toggle Chatbot"
+      >
+        <ChatBubbleLeftRightIcon className="w-8 h-8" />
+      </button>
     </div>
   );
 };

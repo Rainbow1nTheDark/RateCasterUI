@@ -24,6 +24,8 @@ import {
     TaskCadence,
     UserTaskProgressEntry
 } from './types';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from '@google/generative-ai';
+
 
 // --- Configuration ---
 const __filename = fileURLToPath(import.meta.url);
@@ -634,6 +636,84 @@ export async function startBackendApplication() {
                 logger.error('Failed to save task definitions to file after admin update:', e);
             }
             res.status(200).json({ message: 'Task definition processed.', task: newTaskDefinition });
+        });
+
+        app.post('/api/chatbot', async (req, res) => {
+            const { message, history } = req.body;
+        
+            if (!message) {
+                return res.status(400).json({ error: 'Message is required.' });
+            }
+        
+            try {
+                const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+                const model = genAI.getGenerativeModel(
+                    { 
+                        model: "gemini-2.0-flash",
+                        systemInstruction: `You are a helpful assistant for users of the RateCaster platform. Your goal is to help users choose the best app for their use case. 
+When a user asks for dapps, you MUST extract relevant keywords from their request. You will then call the 'getDapps' tool and provide these keywords as the 'query' parameter. 
+After receiving the list of dapps from the tool, you MUST format your entire response as a single, stringified JSON object. 
+This JSON object must have a key 'dapps' which is an array of the dapp data you received, and a key 'hasMore' which is a boolean. 
+Do not add ANY other text, greetings, or explanations outside of this JSON structure. Your response must be only the JSON.`,
+                    });
+        
+                const chat = model.startChat({
+                    history: history || [],
+                    tools: [
+                        {
+                            functionDeclarations: [
+                                {
+                                    name: "getDapps",
+                                    description: "Get the list of dapps available on the platform, filtered by a query.",
+                                    parameters: {
+                                        type: SchemaType.OBJECT,
+                                        properties: {
+                                            query: {
+                                                type: SchemaType.STRING,
+                                                description: "The search query to filter dapps by name, description, or category. This is a required field."
+                                            },
+                                            offset: {
+                                                type: SchemaType.NUMBER,
+                                                description: "The starting index of the dapps to return. Defaults to 0."
+                                            }
+                                        },
+                                        required: ["query"]
+                                    }
+                                },
+                            ],
+                        },
+                    ],
+                });
+        
+                const result = await chat.sendMessage(message);
+                const call = result.response.functionCalls();
+        
+                if (call) {
+                    for (const c of call) {
+                        if (c.name === 'getDapps') {
+                            const { query, offset = 0 } = c.args as { query: string; offset?: number; };
+
+                            const lowerCaseQuery = query.toLowerCase();
+                            const filteredDapps = dappsStore.filter(dapp =>
+                                dapp.name.toLowerCase().includes(lowerCaseQuery) ||
+                                dapp.description.toLowerCase().includes(lowerCaseQuery) ||
+                                dapp.category?.toLowerCase().includes(lowerCaseQuery)
+                            );
+
+                            const dapps = filteredDapps.slice(offset, offset + 5).map(dapp => ({ name: dapp.name, description: dapp.description, rating: dapp.averageRating, dappId: dapp.dappId, category: dapp.category, totalReviews: dapp.totalReviews, url: dapp.url }));
+                            const hasMore = filteredDapps.length > offset + 5;
+                            const result = await chat.sendMessage([{ functionResponse: { name: 'getDapps', response: { dapps, hasMore } } }]);
+                            return res.json({ response: result.response.text() });
+                        }
+                    }
+                }
+        
+                return res.json({ response: result.response.text() });
+        
+            } catch (error) {
+                logger.error('Error in /api/chatbot:', error);
+                res.status(500).json({ error: 'Failed to get response from chatbot.' });
+            }
         });
 
         app.post('/api/actions/refresh-dapp-from-chain', async (req: express.Request<{}, {}, { dappId: string }>, res: express.Response) => {
