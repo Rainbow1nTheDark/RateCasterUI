@@ -25,8 +25,8 @@ import { RateCaster } from '@ratecaster/sdk';
 import '@rainbow-me/rainbowkit/styles.css';
 import { polygon as wagmiPolygon } from 'wagmi/chains'; 
 
-const API_BASE_URL = 'http://localhost:3001/api';
-const SOCKET_SERVER_URL = 'http://localhost:3001'; // URL for Socket.IO connection
+const API_BASE_URL = 'https://app.ratecaster.xyz/api';
+const SOCKET_SERVER_URL = 'https://app.ratecaster.xyz'; // URL for Socket.IO connection
 const FRONTEND_RPC_URL = 'https://polygon-rpc.com'; 
 
 const queryClientTanstack = new QueryClient(); 

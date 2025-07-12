@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { DappRegistered } from '../types';
 import StarRating from './StarRating';
@@ -11,7 +10,7 @@ interface DappCardProps {
   userAddress: string | null;
   startEditDapp: (dapp: DappRegistered) => void;
   openRatingModal: (dappId: string) => void;
-  onNavigateToDetail: (dappId: string) => void;
+  onNavigateToDetail: (dappId: string) => void; // New prop
 }
 
 const DappCard: React.FC<DappCardProps> = ({ dapp, isLoading, userAddress, startEditDapp, openRatingModal, onNavigateToDetail }) => {
@@ -27,13 +26,23 @@ const DappCard: React.FC<DappCardProps> = ({ dapp, isLoading, userAddress, start
 
   return (
     <div 
-      className="bg-neutral-800 rounded-xl shadow-lg p-5 flex flex-col h-full min-h-[250px] transition-all duration-300 hover:shadow-xl hover:shadow-yellow-500/20 hover:-translate-y-1 cursor-pointer"
+      className="bg-neutral-800 rounded-xl shadow-lg p-4 flex flex-col h-full min-h-[400px] transition-all duration-300 hover:shadow-xl hover:shadow-yellow-500/20 hover:-translate-y-1 cursor-pointer"
       onClick={handleCardClick}
       role="link" // Semantically it acts as a link
       tabIndex={0} // Make it focusable
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick(e as any); }} // Keyboard accessible
       aria-label={`View details for ${dapp.name}`}
     >
+      {/* Image */}
+      <div className="relative w-full aspect-[2/1] mb-3">
+        <img
+          src={dapp.imageUrl || `https://picsum.photos/seed/${dapp.dappId}/400/200`}
+          alt={dapp.name}
+          className="w-full h-full object-contain rounded-lg bg-neutral-700"
+          onError={(e) => (e.currentTarget.src = `https://picsum.photos/seed/${dapp.dappId}/400/200`)}
+        />
+      </div>
+
       {/* Content */}
       <div className="flex flex-col flex-grow">
         <h3 className="text-lg font-semibold text-yellow-500 mb-1 truncate" title={dapp.name}>

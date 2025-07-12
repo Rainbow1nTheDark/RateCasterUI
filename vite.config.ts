@@ -16,13 +16,16 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      host: '0.0.0.0',
+      strictPort: true,
+      allowedHosts: ['app.ratecaster.xyz'],
       port: 8080,
       open: true, // Open browser on start
       proxy: {
         '/api': {
           target: 'http://localhost:3001',
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, '/api'),
+         // rewrite: (path) => path.replace(/^\/api/, '/api'),
         },
         '/socket.io': {
           target: 'http://localhost:3001',

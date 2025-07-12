@@ -1,9 +1,9 @@
 {
   "0xcb7437cad07230c488a118890494fbb545ddc7cb": {
     "address": "0xcb7437caD07230C488a118890494FBB545ddC7cB",
-    "points": 410,
+    "points": 465,
     "reviewStreak": 1,
-    "lastLoginTimestamp": 1750606808867,
+    "lastLoginTimestamp": 1751075037508,
     "lastReviewTimestamp": 1750381231480
   },
   "0x8f5505fd7f0149013eb45044dc1ffa956b3daf89": {
@@ -22,9 +22,44 @@
   },
   "0x984bb6515d4fd1c47f0e2e2b506d0406f0611578": {
     "address": "0x984BB6515d4Fd1C47f0E2E2b506D0406F0611578",
+    "points": 80,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 1752268659071,
+    "lastReviewTimestamp": 0
+  },
+  "0xfaf3fb18c9cfcd328b1dfdf55078c9bfe5e20740": {
+    "address": "0xfAf3fb18C9CFCD328B1DFDf55078C9BfE5e20740",
+    "points": 80,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 1751597119429,
+    "lastReviewTimestamp": 0
+  },
+  "0x5cc23e7ac385e30fede40e9190907462e48d97fa": {
+    "address": "0x5CC23E7ac385E30fedE40E9190907462E48d97Fa",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x7425ab66b6c8a3608f820aa0829eb1a975b79f0e": {
+    "address": "0x7425aB66b6C8A3608f820aA0829eB1a975b79F0e",
     "points": 10,
     "reviewStreak": 0,
-    "lastLoginTimestamp": 1750380824732,
+    "lastLoginTimestamp": 1751063396574,
+    "lastReviewTimestamp": 0
+  },
+  "0x4588965fb1064f312ef6f9794e5e995e9008a90a": {
+    "address": "0x4588965Fb1064F312ef6f9794E5e995e9008A90a",
+    "points": 30,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 1751268649581,
+    "lastReviewTimestamp": 0
+  },
+  "0xd8ec8c0a1925c75632f05b76c2795559a6e3aaca": {
+    "address": "0xd8Ec8c0A1925c75632f05b76c2795559A6E3Aaca",
+    "points": 10,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 1751227557806,
     "lastReviewTimestamp": 0
   }
 }

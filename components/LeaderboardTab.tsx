@@ -6,7 +6,7 @@ import { FireIcon } from './icons/FireIcon';
 import { StarIcon } from './icons/StarIcon'; // For points
 import { UserCircleIcon } from './icons/UserCircleIcon';
 
-const API_BASE_URL = 'http://localhost:3001/api'; // Adjust if your backend URL is different
+const API_BASE_URL = 'https://app.ratecaster.xyz/api'; // Adjust if your backend URL is different
 
 const LeaderboardTab: React.FC = () => {
   const [topReviewers, setTopReviewers] = useState<LeaderboardEntry[]>([]);

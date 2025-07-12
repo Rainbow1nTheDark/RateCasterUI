@@ -10,10 +10,9 @@ const POLYGON_AMOY_RPC_URL = 'https://polygon-amoy-rpc.com';
 
 // Configure Wagmi with Polygon chain
 export const wagmiConfig = createConfig({
-  chains: [polygon, polygonAmoy],
+  chains: [polygon],
   transports: {
     [polygon.id]: http(POLYGON_MAINNET_RPC_URL),
-    [polygonAmoy.id]: http(POLYGON_AMOY_RPC_URL),
   },
   connectors: [
     injected({ target: 'rainbow' }), // Prioritize Rainbow Wallet
@@ -23,4 +22,4 @@ export const wagmiConfig = createConfig({
 });
 
 // Export chains for RainbowKitProvider
-export const supportedChains = [polygon, polygonAmoy];
+export const supportedChains = [polygon];

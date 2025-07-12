@@ -10,7 +10,7 @@ import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ExternalLinkIcon } from './icons/ExternalLinkIcon';
 import { ChatBubbleOvalLeftEllipsisIcon } from './icons/ChatBubbleOvalLeftEllipsisIcon';
 
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'https://app.ratecaster.xyz/api';
 // const FRONTEND_RPC_URL = 'https://polygon-rpc.com'; // No longer needed for SDK init here
 
 interface DappDetailPageProps {
