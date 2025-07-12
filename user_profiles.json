@@ -64,7 +64,7 @@
   },
   "0xe8e1ca018642f4598433c05a9f273f1e7e491450": {
     "address": "0xE8e1Ca018642F4598433C05A9F273F1e7e491450",
-    "points": 230,
+    "points": 250,
     "reviewStreak": 0,
     "lastLoginTimestamp": 1752333011595,
     "lastReviewTimestamp": 0
@@ -211,6 +211,13 @@
   },
   "0x1d6cad7283e8ab1d06a7c5758189932e1eb422be": {
     "address": "0x1d6cAd7283E8ab1D06a7C5758189932e1eb422bE",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0xdcf5d1cd4cfd8f27c16a8c6d3ffca2e22c12c1f2": {
+    "address": "0xDCf5D1cD4CFd8f27C16A8C6D3FFCa2e22C12c1f2",
     "points": 15,
     "reviewStreak": 0,
     "lastLoginTimestamp": 0,

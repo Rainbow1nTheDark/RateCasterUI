@@ -9,8 +9,7 @@ import http from 'http';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import express from 'express'; // Keep the default import for app creation
-// import { Request, Response, NextFunction, ErrorRequestHandler } from 'express'; // Remove these individual imports
+import express from 'express';
 import { Server, Socket as SocketIOSocket } from 'socket.io';
 import cors from 'cors';
 import {
@@ -24,7 +23,7 @@ import {
     TaskCadence,
     UserTaskProgressEntry
 } from './types';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from '@google/generative-ai';
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold, Type, GenerateContentResponse, Chat, Part } from '@google/genai';
 
 
 // --- Configuration ---
@@ -638,7 +637,9 @@ export async function startBackendApplication() {
             res.status(200).json({ message: 'Task definition processed.', task: newTaskDefinition });
         });
 
-        app.post('/api/chatbot', async (req, res) => {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+
+        app.post('/api/chatbot', async (req: express.Request, res: express.Response) => {
             const { message, history } = req.body;
         
             if (!message) {
@@ -646,34 +647,31 @@ export async function startBackendApplication() {
             }
         
             try {
-                const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-                const model = genAI.getGenerativeModel(
-                    { 
-                        model: "gemini-2.0-flash",
-                        systemInstruction: `You are a helpful assistant for users of the RateCaster platform. Your goal is to help users choose the best app for their use case. 
-When a user asks for dapps, you MUST extract relevant keywords from their request. You will then call the 'getDapps' tool and provide these keywords as the 'query' parameter. 
-After receiving the list of dapps from the tool, you MUST format your entire response as a single, stringified JSON object. 
-This JSON object must have a key 'dapps' which is an array of the dapp data you received, and a key 'hasMore' which is a boolean. 
-Do not add ANY other text, greetings, or explanations outside of this JSON structure. Your response must be only the JSON.`,
-                    });
-        
-                const chat = model.startChat({
-                    history: history || [],
-                    tools: [
-                        {
+                // Sanitize history to prevent API errors from extra fields.
+                const sanitizedHistory = history?.map((item: any) => ({
+                    role: item.role,
+                    parts: item.parts
+                })) || [];
+
+                const chat: Chat = ai.chats.create({
+                    model: 'gemini-2.5-flash',
+                    history: sanitizedHistory,
+                    config: {
+                        systemInstruction: `You are a helpful assistant for the RateCaster platform. Your goal is to help users find the best dApp. When a user asks for dapps, you MUST call the 'getDapps' tool. After receiving the list of dapps from the tool, you MUST format your entire response as a single, valid, stringified JSON object. This JSON object must have a key 'dapps' which is an array of the dapp data. For each dapp, you MUST include ALL of the following fields from the tool's response: 'name', 'description', 'averageRating', 'totalReviews', 'dappId', 'category', and 'url'. Do not summarize, alter, or omit any fields for any dapp. The response must also include a 'hasMore' boolean key. Do not add ANY other text, greetings, or explanations outside of this JSON structure. Your entire response must be ONLY the JSON.`,
+                        tools: [{
                             functionDeclarations: [
                                 {
                                     name: "getDapps",
                                     description: "Get the list of dapps available on the platform, filtered by a query.",
                                     parameters: {
-                                        type: SchemaType.OBJECT,
+                                        type: Type.OBJECT,
                                         properties: {
                                             query: {
-                                                type: SchemaType.STRING,
+                                                type: Type.STRING,
                                                 description: "The search query to filter dapps by name, description, or category. This is a required field."
                                             },
                                             offset: {
-                                                type: SchemaType.NUMBER,
+                                                type: Type.NUMBER,
                                                 description: "The starting index of the dapps to return. Defaults to 0."
                                             }
                                         },
@@ -681,34 +679,45 @@ Do not add ANY other text, greetings, or explanations outside of this JSON struc
                                     }
                                 },
                             ],
-                        },
-                    ],
+                        }],
+                    }
                 });
         
-                const result = await chat.sendMessage(message);
-                const call = result.response.functionCalls();
+                let response: GenerateContentResponse = await chat.sendMessage({ message });
+                let functionCalls = response.functionCalls;
         
-                if (call) {
-                    for (const c of call) {
-                        if (c.name === 'getDapps') {
-                            const { query, offset = 0 } = c.args as { query: string; offset?: number; };
-
+                if (functionCalls && functionCalls.length > 0) {
+                    for (const call of functionCalls) {
+                        if (call.name === 'getDapps') {
+                            const { query, offset = 0 } = call.args as { query: string; offset?: number; };
+                            
                             const lowerCaseQuery = query.toLowerCase();
                             const filteredDapps = dappsStore.filter(dapp =>
                                 dapp.name.toLowerCase().includes(lowerCaseQuery) ||
                                 dapp.description.toLowerCase().includes(lowerCaseQuery) ||
-                                dapp.category?.toLowerCase().includes(lowerCaseQuery)
+                                (dapp.category || '').toLowerCase().includes(lowerCaseQuery)
                             );
-
-                            const dapps = filteredDapps.slice(offset, offset + 5).map(dapp => ({ name: dapp.name, description: dapp.description, rating: dapp.averageRating, dappId: dapp.dappId, category: dapp.category, totalReviews: dapp.totalReviews, url: dapp.url }));
+                            
+                            const dapps = filteredDapps.slice(offset, offset + 5).map(dapp => ({ name: dapp.name, description: dapp.description, averageRating: dapp.averageRating, totalReviews: dapp.totalReviews, dappId: dapp.dappId, category: dapp.category, url: dapp.url }));
                             const hasMore = filteredDapps.length > offset + 5;
-                            const result = await chat.sendMessage([{ functionResponse: { name: 'getDapps', response: { dapps, hasMore } } }]);
-                            return res.json({ response: result.response.text() });
+                            
+                            const functionResponsePart: Part = {
+                                functionResponse: {
+                                  name: 'getDapps',
+                                  response: { dapps, hasMore },
+                                },
+                            };
+
+                            const toolResponse = await chat.sendMessage({
+                                message: [functionResponsePart]
+                            });
+
+                            return res.json({ response: toolResponse.text });
                         }
                     }
                 }
         
-                return res.json({ response: result.response.text() });
+                return res.json({ response: response.text });
         
             } catch (error) {
                 logger.error('Error in /api/chatbot:', error);
@@ -762,7 +771,7 @@ Do not add ANY other text, greetings, or explanations outside of this JSON struc
         httpServer.listen(PORT, () => logger.info(`Backend server listening on http://localhost:${PORT}`));
     } catch (error) {
         logger.error('FATAL ERROR during backend startup:', error);
-        process.exit(1);
+        (process as any).exit(1);
     }
 }
 
@@ -779,15 +788,15 @@ async function gracefulShutdown(signal: string) {
     }
     await saveUserProfilesToDB();
     logger.info('User profiles saved.');
-    setTimeout(() => process.exit(0), 2000);
+    setTimeout(() => (process as any).exit(0), 2000);
 }
 
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('unhandledRejection', (reason, promise) => logger.error('Unhandled Rejection:', { promise, reason }));
-process.on('uncaughtException', (error) => {
+(process as any).on('SIGINT', () => gracefulShutdown('SIGINT'));
+(process as any).on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+(process as any).on('unhandledRejection', (reason: any, promise: any) => logger.error('Unhandled Rejection:', { promise, reason }));
+(process as any).on('uncaughtException', (error: any) => {
     logger.error('Uncaught Exception:', error);
-    gracefulShutdown('uncaughtException').finally(() => process.exit(1));
+    gracefulShutdown('uncaughtException').finally(() => (process as any).exit(1));
 });
 
 startBackendApplication();

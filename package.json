@@ -25,6 +25,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@google/genai": "^1.9.0",
     "@google/generative-ai": "^0.24.1",
     "@rainbow-me/rainbowkit": "^2.2.6",
     "@ratecaster/sdk": "^0.0.4",

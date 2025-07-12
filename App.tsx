@@ -25,7 +25,7 @@ import { Chatbot } from './components/Chatbot';
 import { ChatBubbleLeftRightIcon } from './components/icons/ChatBubbleLeftRightIcon';
 
 import '@rainbow-me/rainbowkit/styles.css';
-import { polygon as wagmiPolygon } from 'wagmi/chains'; 
+import { polygon as wagmiPolygon } from 'viem/chains'; 
 
 const API_BASE_URL = 'http://localhost:3001/api';
 const SOCKET_SERVER_URL = 'https://app.ratecaster.xyz'; // URL for Socket.IO connection
@@ -523,6 +523,7 @@ const App: React.FC = () => {
 
   const handleNavigateToDappDetail = (dappId: string) => {
     setSelectedDappIdForDetailPage(dappId);
+    setIsChatbotOpen(false); // Close chatbot on navigation
     window.scrollTo(0, 0); 
   };
 
@@ -554,10 +555,8 @@ const App: React.FC = () => {
               <StatusBar 
                 appStatus={appStatus} 
                 userAddress={userAddress} 
-                userProfile={userProfile}
                 isLoading={isCoreDataLoading && !hasInitialDataLoadedOnce} 
                 currentChainName={currentChainName}
-                setActiveTab={setActiveTab}
               />
             </header>
 
@@ -574,7 +573,6 @@ const App: React.FC = () => {
             <Tabs 
               activeTab={activeTab} 
               isLoading={isCoreDataLoading && !hasInitialDataLoadedOnce} 
-              userAddress={userAddress} 
               setActiveTab={setActiveTab} 
             />
             

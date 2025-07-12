@@ -4,7 +4,7 @@ import { StarIcon } from './icons/StarIcon';
 interface StarRatingProps {
   rating: number;
   totalStars?: number;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xs';
   interactive?: boolean;
   onRate?: (rating: number) => void;
 }
@@ -15,6 +15,7 @@ const StarRating: React.FC<StarRatingProps> = ({ rating, totalStars = 5, size = 
   const emptyStars = totalStars - fullStars - (halfStar ? 1 : 0);
 
   const starSizeClasses = {
+    xs: 'w-3 h-3',
     sm: 'w-4 h-4',
     md: 'w-5 h-5',
     lg: 'w-6 h-6',
