@@ -27,7 +27,7 @@ import { ChatBubbleLeftRightIcon } from './components/icons/ChatBubbleLeftRightI
 import '@rainbow-me/rainbowkit/styles.css';
 import { polygon as wagmiPolygon } from 'viem/chains'; 
 
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'https://app.ratecaster.xyz/api';
 const SOCKET_SERVER_URL = 'https://app.ratecaster.xyz'; // URL for Socket.IO connection
 const FRONTEND_RPC_URL = 'https://polygon-rpc.com'; 
 

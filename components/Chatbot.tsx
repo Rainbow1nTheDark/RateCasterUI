@@ -5,7 +5,7 @@ import { ChatBubbleLeftRightIcon } from './icons/ChatBubbleLeftRightIcon';
 import { DappRegistered } from '../types';
 import ChatDappCard from './ChatDappCard';
 
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'https://app.ratecaster.xyz/api';
 
 interface ChatMessage {
     role: 'user' | 'model';
