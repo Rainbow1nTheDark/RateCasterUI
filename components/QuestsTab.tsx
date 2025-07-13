@@ -5,7 +5,7 @@ import Spinner from './Spinner';
 import { QuestsIcon } from './icons/QuestsIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 
-const API_BASE_URL = 'http://app.ratecaster.xyz/api';
+const API_BASE_URL = 'https://app.ratecaster.xyz/api';
 
 interface QuestsTabProps {
   userAddress: string | null;

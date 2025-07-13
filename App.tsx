@@ -26,6 +26,7 @@ import { ChatBubbleLeftRightIcon } from './components/icons/ChatBubbleLeftRightI
 
 import '@rainbow-me/rainbowkit/styles.css';
 import { polygon as wagmiPolygon } from 'viem/chains'; 
+import { RobotIconV1 } from './components/icons/RobotIcon';
 
 const API_BASE_URL = 'https://app.ratecaster.xyz/api';
 const SOCKET_SERVER_URL = 'https://app.ratecaster.xyz'; // URL for Socket.IO connection
@@ -673,7 +674,7 @@ const App: React.FC = () => {
         className="fixed bottom-4 right-4 bg-yellow-500 text-neutral-900 p-4 rounded-full shadow-lg hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 z-40"
         aria-label="Toggle Chatbot"
       >
-        <ChatBubbleLeftRightIcon className="w-8 h-8" />
+        <RobotIconV1 className="w-8 h-8" />
       </button>
     </div>
   );
