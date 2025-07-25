@@ -1,4 +1,3 @@
-
 /// <reference types="node" />
 import dotenv from 'dotenv';
 dotenv.config();
@@ -24,6 +23,9 @@ import {
     UserTaskProgressEntry
 } from './types';
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold, Type, GenerateContentResponse, Chat, Part } from '@google/genai';
+// --- NEW ---
+// Import the SQLite library
+import Database from 'better-sqlite3';
 
 
 // --- Configuration ---
@@ -33,6 +35,9 @@ const RPC_URL = process.env.RPC_URL || 'https://polygon-rpc.com'; // Default to 
 const WEBSOCKET_URL = process.env.WEBSOCKET_URL || 'wss://polygon-mainnet.g.alchemy.com/v2/8df5Ufs4d85WriX-pY383TTWk740Q0P0';
 const PORT = Number(process.env.PORT) || 3001;
 const DB_FILE_PATH = process.env.DB_FILE_PATH || path.join(__dirname, 'user_profiles.json');
+// --- NEW ---
+// Add the path to your reviews database. Assumes it's in the project root.
+const REVIEW_DB_PATH = process.env.REVIEW_DB_PATH || path.join('etherscan-reviews copy.db');
 const TASKS_DEFINITIONS_PATH = path.join(__dirname, 'tasks-definitions.json');
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "SUPER_SECRET_ADMIN_KEY";
 
@@ -140,13 +145,12 @@ async function initializeSDK(): Promise<RateCaster> {
             logger.info(`Attempting to initialize WebSocket provider with URL: ${WEBSOCKET_URL}`);
             wsProvider = new ethers.WebSocketProvider(WEBSOCKET_URL);
 
-            // Test connection
-            await wsProvider.getBlockNumber(); // This will throw an error if connection fails
+            await wsProvider.getBlockNumber();
             logger.info('WebSocket provider initialized and connected successfully.');
             wsProviderInitialized = true;
         } catch (error) {
             logger.error('Failed to initialize or connect WebSocket provider:', error);
-            wsProvider = null; // Ensure wsProvider is null if initialization fails
+            wsProvider = null;
             wsProviderInitialized = false;
         }
     } else {
@@ -155,7 +159,7 @@ async function initializeSDK(): Promise<RateCaster> {
     }
 
 
-    const sdk = new RateCaster(httpProvider, wsProvider); // Pass potentially null wsProvider
+    const sdk = new RateCaster(httpProvider, wsProvider); 
 
     ratecasterSDKInstance = sdk;
     sdkInitialized = true;
@@ -170,11 +174,96 @@ function calculateDappAggregates(dapp: SDKDappRegistered | FrontendDappRegistere
     return { totalReviews: Number(totalReviews), averageRating: Number(averageRating.toFixed(2)) };
 }
 
+async function fetchInitialDataFromDb(sdk: RateCaster) {
+    logger.info('DB-FIRST DATA LOAD: Starting initial data load from SQLite...');
+    let db: Database.Database | null = null;
+    try {
+        // Step 1: Fetch dApp shells from the SDK. Their IDs will be our reference.
+        const sdkDappsNoAggregates = await sdk.getAllDapps(false);
+        logger.info(`DB-FIRST DATA LOAD: Fetched ${sdkDappsNoAggregates.length} dApp shells from SDK.`);
 
+        // Create a fast lookup map with lowercase IDs
+        const dappInfoMap = new Map<string, SDKDappRegistered>();
+        for (const dapp of sdkDappsNoAggregates) {
+            dappInfoMap.set(dapp.dappId.toLowerCase(), dapp);
+        }
+
+        // Step 2: Read all reviews from our reliable SQLite database.
+        logger.info(`DB-FIRST DATA LOAD: Reading reviews from SQLite database at: ${REVIEW_DB_PATH}`);
+        db = new Database(REVIEW_DB_PATH, { readonly: true, fileMustExist: true });
+        
+        const rows = db.prepare('SELECT * FROM etherscan_reviews').all() as any[];
+        logger.info(`DB-FIRST DATA LOAD: Found ${rows.length} reviews in the local database.`);
+
+        // Step 3: Initialize stores and map DB rows to our frontend review type.
+        const newAllReviewsStore: FrontendDappReview[] = [];
+        const newReviewsByDappStore: Record<string, FrontendDappReview[]> = {};
+
+        for (const row of rows) {
+            const rowDappIdLower = row.dappId.toLowerCase();
+            const dappInfo = dappInfoMap.get(rowDappIdLower);
+
+            const review: FrontendDappReview = {
+                id: row.txHash,
+                attestationId: row.txHash,
+                dappId: rowDappIdLower,
+                starRating: row.starRating,
+                reviewText: row.reviewText,
+                rater: row.fromAddress,
+                timestamp: row.blockNumber,
+                dappName: dappInfo?.name || 'Unknown Dapp',
+            };
+            
+            newAllReviewsStore.push(review);
+
+            if (!newReviewsByDappStore[rowDappIdLower]) {
+                newReviewsByDappStore[rowDappIdLower] = [];
+            }
+            newReviewsByDappStore[rowDappIdLower].push(review);
+        }
+        
+        // Atomically update the global stores
+        allReviewsStore = newAllReviewsStore;
+        reviewsByDappStore = newReviewsByDappStore;
+
+        // Step 4: Create the final dappsStore with fresh aggregates.
+        const newDappsStore: FrontendDappRegistered[] = [];
+        for (const dappShell of sdkDappsNoAggregates) {
+            const key = dappShell.dappId.toLowerCase();
+            const reviewsForThisDapp = reviewsByDappStore[key] || [];
+            const aggregates = calculateDappAggregates(dappShell, reviewsForThisDapp);
+            
+            newDappsStore.push({
+                ...dappShell,
+                dappId: key, // Ensure final ID is also lowercase
+                category: dappShell.category,
+                totalReviews: aggregates.totalReviews,
+                averageRating: aggregates.averageRating,
+            });
+        }
+        
+        // Atomically update the global dapps store
+        dappsStore = newDappsStore;
+
+        logger.info(`<<<<< DATA LOAD COMPLETE >>>>> Processed ${dappsStore.length} dApps with ${allReviewsStore.length} reviews from local DB.`);
+
+    } catch (error) {
+        logger.error('FATAL: Failed to fetch initial data from the database:', error);
+        throw error;
+    } finally {
+        if (db) {
+            db.close();
+        }
+    }
+}
+
+
+// The old function is no longer used, but kept here for reference.
+/*
 async function fetchInitialData(sdk: RateCaster) {
     logger.info('Fetching initial dApp and review data using SDK...');
     try {
-        const sdkDappsNoAggregates = await sdk.getAllDapps(false);
+        const sdkDappsNoAggregates = await sdk.getAllDapps(true);
         logger.info(`Fetched ${sdkDappsNoAggregates.length} dApp shells from SDK.`);
 
         const allSDKReviews = await sdk.getAllReviews();
@@ -209,8 +298,9 @@ async function fetchInitialData(sdk: RateCaster) {
         throw error;
     }
 }
+*/
 
-// --- Task System Logic ---
+// --- Task System Logic (No changes needed here) ---
 function getUtcDateString(timestamp: number = Date.now()): string {
     return new Date(timestamp).toISOString().split('T')[0];
 }
@@ -326,9 +416,7 @@ async function processNewReview(reviewFromSDK: SDKDappReview) {
     logger.info(`Processing new review event: ID ${reviewFromSDK.id} for dApp ${reviewFromSDK.dappId}`);
 
     const serializedSDKReview = serializeBigInt(reviewFromSDK) as FrontendDappReview;
-    // Ensure timestamp exists after serialization
     if (!serializedSDKReview.timestamp) serializedSDKReview.timestamp = Date.now();
-
 
     let dapp = dappsStore.find(d => d.dappId === serializedSDKReview.dappId);
     if (!dapp && ratecasterSDKInstance) {
@@ -361,7 +449,7 @@ async function processNewReview(reviewFromSDK: SDKDappReview) {
     const fullReview: FrontendDappReview = {
         ...serializedSDKReview,
         dappName: dapp?.name || 'Unknown Dapp',
-        timestamp: serializedSDKReview.timestamp, // Carry over the timestamp
+        timestamp: serializedSDKReview.timestamp,
     };
 
     allReviewsStore = [fullReview, ...allReviewsStore.filter(r => r.id !== fullReview.id)]
@@ -429,7 +517,6 @@ async function startReviewListener(sdk: RateCaster) {
 
     try {
         await sdk.listenToReviews((review: SDKDappReview) => {
-            // This is the callback that receives events from the SDK
             logger.debug(`Backend received raw ${eventName} event from SDK:`, review);
             processNewReview(review).catch(error => {
                 logger.error(`Error processing review event from SDK callback for ${eventName}:`, error);
@@ -441,7 +528,7 @@ async function startReviewListener(sdk: RateCaster) {
         logger.info(`Attempting to stop any existing listener for ${eventName} and will retry in 5 seconds...`);
         try {
             if (typeof sdk.stopListening === 'function') {
-                await sdk.stopListening(eventName); // Pass eventName if SDK supports it
+                await sdk.stopListening(eventName);
             }
         } catch (stopError) {
             logger.error(`Error trying to stop listener for ${eventName} before retry:`, stopError);
@@ -458,7 +545,9 @@ export async function startBackendApplication() {
         if (!sdkInitialized || !ratecasterSDKInstance) {
             throw new Error("SDK could not be initialized. Backend cannot start.");
         }
-        await fetchInitialData(sdk);
+        // --- MODIFIED ---
+        // We now call our new, fast, DB-powered function for the initial data load.
+        await fetchInitialDataFromDb(sdk);
 
         const app = express();
         app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
@@ -487,6 +576,8 @@ export async function startBackendApplication() {
 
 
         await startReviewListener(sdk);
+
+        // --- All API endpoints below this line remain unchanged ---
 
         app.get('/api/health', (req: express.Request, res: express.Response) => res.status(200).json({
             status: 'UP',
@@ -647,7 +738,6 @@ export async function startBackendApplication() {
             }
         
             try {
-                // Sanitize history to prevent API errors from extra fields.
                 const sanitizedHistory = history?.map((item: any) => ({
                     role: item.role,
                     parts: item.parts
@@ -771,7 +861,7 @@ export async function startBackendApplication() {
         httpServer.listen(PORT, () => logger.info(`Backend server listening on http://localhost:${PORT}`));
     } catch (error) {
         logger.error('FATAL ERROR during backend startup:', error);
-        (process as any).exit(1);
+        process.exit(1);
     }
 }
 
@@ -780,7 +870,7 @@ async function gracefulShutdown(signal: string) {
     if (io) io.close(() => logger.info('Socket.IO server closed.'));
     if (ratecasterSDKInstance && typeof ratecasterSDKInstance.stopListening === 'function') {
         try {
-            await ratecasterSDKInstance.stopListening("DappRatingSubmitted"); // Specify event if method supports it
+            await ratecasterSDKInstance.stopListening("DappRatingSubmitted");
             logger.info('SDK review listener stopped.');
         } catch (e: any) {
             logger.warn('Error stopping SDK listener:', e.message);
@@ -788,15 +878,15 @@ async function gracefulShutdown(signal: string) {
     }
     await saveUserProfilesToDB();
     logger.info('User profiles saved.');
-    setTimeout(() => (process as any).exit(0), 2000);
+    setTimeout(() => process.exit(0), 2000);
 }
 
-(process as any).on('SIGINT', () => gracefulShutdown('SIGINT'));
-(process as any).on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-(process as any).on('unhandledRejection', (reason: any, promise: any) => logger.error('Unhandled Rejection:', { promise, reason }));
-(process as any).on('uncaughtException', (error: any) => {
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('unhandledRejection', (reason: any, promise: any) => logger.error('Unhandled Rejection:', { promise, reason }));
+process.on('uncaughtException', (error: any) => {
     logger.error('Uncaught Exception:', error);
-    gracefulShutdown('uncaughtException').finally(() => (process as any).exit(1));
+    gracefulShutdown('uncaughtException').finally(() => process.exit(1));
 });
 
 startBackendApplication();
