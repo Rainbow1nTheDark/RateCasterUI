@@ -514,11 +514,10 @@ function serializeBigInt(obj: any): any {
     return obj;
 }
 
-// --- MODIFIED ---
 /**
  * Starts and maintains a durable listener for new reviews.
- * Uses an exponential backoff strategy for reconnection attempts.
- * This function will run indefinitely, trying to keep the listener active.
+ * Uses an exponential backoff strategy for reconnection and an independent
+ * heartbeat provider to detect silent connection drops without accessing SDK internals.
  * @param sdk The RateCaster SDK instance.
  */
 async function startReviewListener(sdk: RateCaster) {
@@ -530,7 +529,7 @@ async function startReviewListener(sdk: RateCaster) {
     logger.info('Starting durable SDK review listener...');
 
     if (!wsProviderInitialized) {
-        logger.error('CRITICAL: WebSocket provider not initialized. Real-time review listening cannot function.');
+        logger.error('CRITICAL: WebSocket URL not configured or failed to initialize. Real-time review listening cannot function.');
         isListenerRunning = false;
         return;
     }
@@ -542,44 +541,91 @@ async function startReviewListener(sdk: RateCaster) {
     }
 
     let reconnectAttempts = 0;
-    const maxReconnectAttempts = 10; // After this, it will keep trying but at a max delay.
-    const baseDelay = 1000; // 1 second
+    const baseDelay = 5000;  // Start with a 5-second delay
     const maxDelay = 60000; // 1 minute
-
     const eventName = "DappRatingSubmitted";
 
+    let heartbeatInterval: NodeJS.Timeout | null = null;
+    let heartbeatProvider: ethers.WebSocketProvider | null = null;
+
+    // A single, robust cleanup function
+    const cleanup = async () => {
+        logger.debug('Running cleanup routine...');
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+            heartbeatInterval = null;
+        }
+        if (heartbeatProvider) {
+            // Properly destroy the independent WebSocket connection
+            heartbeatProvider.destroy();
+            heartbeatProvider = null;
+            logger.info('Heartbeat provider connection terminated.');
+        }
+        if (typeof sdk.stopListening === 'function') {
+            await sdk.stopListening(eventName).catch(stopErr => logger.warn(`Minor error while stopping SDK listener during cleanup: ${stopErr.message}`));
+        }
+    };
+
     const connect = async () => {
+        // Ensure a clean state before every connection attempt
+        await cleanup();
+
         try {
             logger.info(`Attempting to subscribe to "${eventName}" events...`);
+
+            // 1. Set up the main listener through the SDK
             await sdk.listenToReviews((review: SDKDappReview) => {
-                // On a new review, reset the reconnect counter as we have a healthy connection.
                 if (reconnectAttempts > 0) {
-                    logger.info('Successfully received an event. Resetting reconnect timer.');
-                    reconnectAttempts = 0;
+                    logger.info('Successfully received an event from SDK. Resetting reconnect timer.');
                 }
+                reconnectAttempts = 0; // Reset on any successful event
                 processNewReview(review).catch(error => {
                     logger.error('Error processing a new review:', error);
                 });
             });
-            logger.info(`Successfully subscribed to "${eventName}" events. Listening for new reviews.`);
-            // The listener is now active. The promise from listenToReviews may not resolve
-            // if it's a continuous listener, so we rely on events coming in.
-        } catch (error) {
-            logger.error(`Failed to subscribe to "${eventName}" events:`, error);
-            
-            // Clean up existing listeners before retrying
-            if (typeof sdk.stopListening === 'function') {
-                await sdk.stopListening(eventName).catch(stopErr => logger.warn('Minor error while stopping listener during reconnect:', stopErr));
+
+            logger.info(`SDK subscribed to "${eventName}" events. Now starting independent heartbeat.`);
+            reconnectAttempts = 0; // Reset on successful subscription
+
+            // 2. Set up the parallel heartbeat provider
+            try {
+                heartbeatProvider = new ethers.WebSocketProvider(WEBSOCKET_URL);
+                logger.debug('Heartbeat provider created. Awaiting initial connection...');
+                // Wait for the connection to be established by making a call
+                const initialBlock = await heartbeatProvider.getBlockNumber();
+                logger.info(`Heartbeat provider connected successfully. Initial block: ${initialBlock}`);
+
+                // 3. Start the heartbeat interval check
+                heartbeatInterval = setInterval(async () => {
+                    if (!heartbeatProvider) return; // Should not happen, but a safeguard
+                    try {
+                        const blockNumber = await heartbeatProvider.getBlockNumber();
+                        logger.debug(`Heartbeat check OK. Current block: ${blockNumber}`);
+                    } catch (e: any) {
+                        logger.error(`Heartbeat check FAILED. Connection likely lost. Reason: ${e.message}`);
+                        logger.info('Triggering full reconnection due to failed heartbeat...');
+                        // The connection is dead. Stop this check and trigger the main reconnect logic.
+                        if (heartbeatInterval) clearInterval(heartbeatInterval);
+                        setTimeout(connect, baseDelay); // Reconnect after a base delay
+                    }
+                }, 30000); // Check every 30 seconds
+
+            } catch (heartbeatError: any) {
+                logger.error(`Failed to initialize the heartbeat provider: ${heartbeatError.message}`);
+                // If the heartbeat provider can't even connect, something is wrong. Trigger main reconnect.
+                throw heartbeatError;
             }
 
+        } catch (error: any) {
+            logger.error(`Failed to subscribe SDK listener or connect heartbeat: ${error.message}`);
             reconnectAttempts++;
             const delay = Math.min(baseDelay * Math.pow(2, reconnectAttempts), maxDelay);
             logger.info(`Will attempt to reconnect in ${delay / 1000} seconds...`);
-            
             setTimeout(connect, delay);
         }
     };
 
+    // Initial call to start the whole process
     await connect();
 }
 
