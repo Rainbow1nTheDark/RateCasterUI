@@ -23,11 +23,6 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
       </div>
       <p className="text-sm text-neutral-300 mb-3 flex-grow line-clamp-3">{review.reviewText || 'No review text'}</p>
       <p className="text-xs text-neutral-400">By: {review.rater.slice(0, 6)}...{review.rater.slice(-4)}</p>
-      {review.timestamp && (
-        <p className="text-xs text-neutral-400 mt-1">
-          {new Date(review.timestamp).toLocaleDateString()}
-        </p>
-      )}
     </div>
   );
 };
