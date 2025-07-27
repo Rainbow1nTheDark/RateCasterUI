@@ -1,11 +1,10 @@
-
 // App.tsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { ethers } 
   from 'ethers';
 import { useAccount, useSwitchChain, useWalletClient } from 'wagmi';
 import { QueryClient } from '@tanstack/react-query';
-import { io, Socket } from 'socket.io-client'; // Import io and Socket
+import { io, Socket } from 'socket.io-client'; 
 import { DappRegistered as AppDappRegistered, DappReview as AppDappReview, CategoryOption, UserProfile as AppUserProfile, LeaderboardEntry, ProjectStats, getCategoryNameById, CategoryId as AppCategoryId } from './types'; 
 import DappCard from './components/DappCard';
 import DappForm from './components/DappForm';
@@ -15,24 +14,32 @@ import Tabs, { ActiveTab } from './components/Tabs';
 import ReviewCard from './components/ReviewCard';
 import Spinner from './components/Spinner';
 import Notification from './components/Notification';
-// import UserProfileDisplay from './components/UserProfileDisplay'; // No longer used directly here
 import LeaderboardTab from './components/LeaderboardTab';
 import QuestsTab from './components/QuestsTab'; 
 import DappDetailPage from './components/DappDetailPage';
 import { ExclamationTriangleIcon } from './components/icons/ExclamationTriangleIcon';
 import { RateCaster } from '@ratecaster/sdk';
 import { Chatbot } from './components/Chatbot';
-import { ChatBubbleLeftRightIcon } from './components/icons/ChatBubbleLeftRightIcon';
+import { RobotIconV1 } from './components/icons/RobotIcon';
 
 import '@rainbow-me/rainbowkit/styles.css';
 import { polygon as wagmiPolygon } from 'viem/chains'; 
-import { RobotIconV1 } from './components/icons/RobotIcon';
 
-const API_BASE_URL = 'https://app.ratecaster.xyz/api';
-const SOCKET_SERVER_URL = 'https://app.ratecaster.xyz'; // URL for Socket.IO connection
+const API_BASE_URL = 'http://localhost:3001/api';
+const SOCKET_SERVER_URL = 'http://localhost:3001';
 const FRONTEND_RPC_URL = 'https://polygon-rpc.com'; 
 
 const queryClientTanstack = new QueryClient(); 
+
+// --- THE FIX: STEP 1 ---
+// Create the socket instance ONCE, outside of the component.
+// This ensures there is only ever one connection for the entire app lifecycle.
+const socket: Socket = io(SOCKET_SERVER_URL, {
+  autoConnect: true, // Automatically connect on load
+  reconnection: true,
+  transports: ['websocket', 'polling'],
+});
+
 
 const App: React.FC = () => {
   const [appStatus, setAppStatus] = useState<string>('Initializing...');
@@ -64,7 +71,6 @@ const App: React.FC = () => {
   const [reviewData, setReviewData] = useState<Partial<Pick<AppDappReview, 'dappId' | 'reviewText'>> & { rating: number }>({ rating: 5 });
   const [newReviewNotification, setNewReviewNotification] = useState<AppDappReview | null>(null);
   
-  const [socket, setSocket] = useState<Socket | null>(null); // Use Socket from socket.io-client
   const { address: wagmiAddress, isConnected: isWagmiConnected, chain: wagmiChain } = useAccount();
   const { switchChainAsync } = useSwitchChain();
   const { data: walletClient } = useWalletClient();
@@ -132,18 +138,14 @@ const App: React.FC = () => {
   }, [userAddress, hasInitialDataLoadedOnce]);
 
 
+  // --- THE FIX: STEP 2 ---
+  // This useEffect now ONLY handles setting up and tearing down event listeners.
+  // It has an empty dependency array `[]` so it runs ONLY ONCE when the component mounts.
   useEffect(() => {
-    const newSocketInstance = io(SOCKET_SERVER_URL, {
-      transports: ['websocket', 'polling'],
-    });
-    setSocket(newSocketInstance);
-
     const handleConnect = () => {
-        console.log('[FE INFO] Socket.IO: Connected with id', newSocketInstance.id);
+        console.log('[FE INFO] Socket.IO: Connected with id', socket.id);
         setAppStatus('Services Connected.');
-        if (wagmiAddress) {
-            newSocketInstance.emit('authenticate', wagmiAddress);
-        }
+        // Initial data fetch on first connect
         if (!hasInitialDataLoadedOnce) { 
             refreshDappsAndReviews(true);
         }
@@ -173,10 +175,7 @@ const App: React.FC = () => {
     const handleNewReviewEvent = (review: AppDappReview) => {
         console.log('[FE INFO] Socket.IO: Received newReview event', review);
         setNewReviewNotification(review);
-        
-        if (userAddress && review.rater.toLowerCase() === userAddress.toLowerCase()) {
-            setUserReviews(prev => [review, ...prev.filter(r => r.id !== review.id)].sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0)));
-        }
+        setUserReviews(prev => [review, ...prev.filter(r => r.id !== review.id)].sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0)));
         setAllReviews(prev => [review, ...prev.filter(r => r.id !== review.id)].sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0)));
     };
 
@@ -191,24 +190,40 @@ const App: React.FC = () => {
         setAppStatus('Connection Lost. Reconnecting...');
     };
 
-    newSocketInstance.on('connect', handleConnect);
-    newSocketInstance.on('userProfileUpdate', handleUserProfileUpdate);
-    newSocketInstance.on('dappUpdate', handleDappUpdate);
-    newSocketInstance.on('newReview', handleNewReviewEvent);
-    newSocketInstance.on('backend_error', handleBackendError);
-    newSocketInstance.on('disconnect', handleDisconnect);
+    // If the socket is already connected when the component mounts, run the connect logic.
+    if (socket.connected) {
+        handleConnect();
+    }
 
+    // Attach all event listeners
+    socket.on('connect', handleConnect);
+    socket.on('userProfileUpdate', handleUserProfileUpdate);
+    socket.on('dappUpdate', handleDappUpdate);
+    socket.on('newReview', handleNewReviewEvent);
+    socket.on('backend_error', handleBackendError);
+    socket.on('disconnect', handleDisconnect);
+
+    // Cleanup function to remove listeners when the component unmounts
     return () => {
-      console.log('[FE INFO] Socket.IO: Removing event listeners on cleanup...');
-      newSocketInstance.off('connect', handleConnect);
-      newSocketInstance.off('userProfileUpdate', handleUserProfileUpdate);
-      newSocketInstance.off('dappUpdate', handleDappUpdate);
-      newSocketInstance.off('newReview', handleNewReviewEvent);
-      newSocketInstance.off('backend_error', handleBackendError);
-      newSocketInstance.off('disconnect', handleDisconnect);
-      if (newSocketInstance.connected) newSocketInstance.disconnect();
+      console.log('[FE INFO] Socket.IO: Removing event listeners on unmount...');
+      socket.off('connect', handleConnect);
+      socket.off('userProfileUpdate', handleUserProfileUpdate);
+      socket.off('dappUpdate', handleDappUpdate);
+      socket.off('newReview', handleNewReviewEvent);
+      socket.off('backend_error', handleBackendError);
+      socket.off('disconnect', handleDisconnect);
     };
-  }, [wagmiAddress, refreshDappsAndReviews, hasInitialDataLoadedOnce, userAddress]); // Refined dependencies
+  }, [hasInitialDataLoadedOnce, refreshDappsAndReviews, selectedDapp?.dappId]); // Minimal dependencies
+
+
+  // --- THE FIX: STEP 3 ---
+  // A separate, dedicated useEffect for authenticating the socket when the user address is available.
+  useEffect(() => {
+      if (socket.connected && wagmiAddress) {
+          console.log(`[FE INFO] Authenticating socket for address: ${wagmiAddress}`);
+          socket.emit('authenticate', wagmiAddress);
+      }
+  }, [wagmiAddress, socket.connected]); // Runs only when address or connection status changes
 
 
   const connectWalletAsync = useCallback(async () => {
@@ -256,9 +271,7 @@ const App: React.FC = () => {
       const profileData: AppUserProfile = await profileRes.json();
       setUserProfile(profileData);
       
-      if (socket && socket.connected) { 
-         socket.emit('authenticate', wagmiAddress);
-      }
+      // No need to emit here, the dedicated useEffect will handle it.
       
       const reviewsRes = await fetch(`${API_BASE_URL}/reviews/user/${wagmiAddress}`);
       if (!reviewsRes.ok) throw new Error('Failed to fetch user reviews');
@@ -274,7 +287,9 @@ const App: React.FC = () => {
     } finally {
       setIsProfileLoading(false);
     }
-  }, [isWagmiConnected, wagmiAddress, wagmiChain, walletClient, switchChainAsync, socket, dapps]);
+  }, [isWagmiConnected, wagmiAddress, wagmiChain, walletClient, switchChainAsync, dapps]);
+
+    // ... (rest of the file is unchanged)
 
   useEffect(() => {
     if (isWagmiConnected && wagmiAddress && walletClient && !userAddress) { 
@@ -499,7 +514,9 @@ const App: React.FC = () => {
       console.log(`Submitting review... (Tx: ${txResponse.hash})`);
       await txResponse.wait();
       setAppStatus('Review submitted successfully!');
-      
+      setIsTxLoading(false);
+      setIsProfileLoading(false);
+
       setRatingModalOpen(false);
       setReviewData({ rating: 5 }); 
 
@@ -524,7 +541,7 @@ const App: React.FC = () => {
 
   const handleNavigateToDappDetail = (dappId: string) => {
     setSelectedDappIdForDetailPage(dappId);
-    setIsChatbotOpen(false); // Close chatbot on navigation
+    setIsChatbotOpen(false);
     window.scrollTo(0, 0); 
   };
 
@@ -556,7 +573,7 @@ const App: React.FC = () => {
               <StatusBar 
                 appStatus={appStatus} 
                 userAddress={userAddress} 
-                isLoading={isCoreDataLoading && !hasInitialDataLoadedOnce} 
+                isLoading={isTxLoading} 
                 currentChainName={currentChainName}
               />
             </header>
@@ -565,7 +582,7 @@ const App: React.FC = () => {
               <div className="mb-4 p-3 bg-red-700/30 border border-red-600 text-red-300 rounded-lg flex items-center">
                 <ExclamationTriangleIcon className="w-5 h-5 mr-2 text-red-400" />
                 <span>{error}</span>
-                <button onClick={() => setError('')} className="ml-auto text-red-300 hover:text-red-100 text-lg">&times;</button>
+                <button onClick={() => setError('')} className="ml-auto text-red-300 hover:text-red-100 text-lg">×</button>
               </div>
             )}
             

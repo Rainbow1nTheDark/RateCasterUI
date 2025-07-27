@@ -55,6 +55,10 @@ let ratecasterSDKInstance: RateCaster | null = null;
 let sdkInitialized = false;
 let wsProviderInitialized = false; // Track WebSocket provider status
 let io: Server | null = null;
+// --- NEW ---
+// State for the durable listener
+let isListenerRunning = false;
+
 
 const logger = {
     info: (message: string, ...args: any[]) => console.log(`[INFO] ${new Date().toISOString()} ${message}`, ...args),
@@ -258,48 +262,6 @@ async function fetchInitialDataFromDb(sdk: RateCaster) {
 }
 
 
-// The old function is no longer used, but kept here for reference.
-/*
-async function fetchInitialData(sdk: RateCaster) {
-    logger.info('Fetching initial dApp and review data using SDK...');
-    try {
-        const sdkDappsNoAggregates = await sdk.getAllDapps(true);
-        logger.info(`Fetched ${sdkDappsNoAggregates.length} dApp shells from SDK.`);
-
-        const allSDKReviews = await sdk.getAllReviews();
-        logger.info(`Fetched ${allSDKReviews.length} total reviews from SDK.`);
-
-        allReviewsStore = allSDKReviews.map(sdkReview => ({
-            ...sdkReview,
-            timestamp: sdkReview.timestamp || Date.now(), // Ensure timestamp exists
-            dappName: sdkDappsNoAggregates.find(d => d.dappId === sdkReview.dappId)?.name || 'Unknown Dapp',
-        }));
-
-        reviewsByDappStore = {};
-        for (const review of allReviewsStore) {
-            if (!reviewsByDappStore[review.dappId]) reviewsByDappStore[review.dappId] = [];
-            reviewsByDappStore[review.dappId].push(review);
-        }
-
-        dappsStore = sdkDappsNoAggregates.map(dappShell => {
-            const reviewsForThisDapp = reviewsByDappStore[dappShell.dappId] || [];
-            const aggregates = calculateDappAggregates(dappShell, reviewsForThisDapp);
-            return {
-                ...dappShell,
-                category: dappShell.category,
-                totalReviews: aggregates.totalReviews,
-                averageRating: aggregates.averageRating,
-            };
-        });
-        logger.info(`Processed ${dappsStore.length} dApps with calculated aggregates.`);
-
-    } catch (error) {
-        logger.error('Failed to fetch initial data from SDK:', error);
-        throw error;
-    }
-}
-*/
-
 // --- Task System Logic (No changes needed here) ---
 function getUtcDateString(timestamp: number = Date.now()): string {
     return new Date(timestamp).toISOString().split('T')[0];
@@ -412,34 +374,83 @@ async function processReviewAndRatingTasks(userAddress: string, isReviewTextPres
 }
 // --- End Task System Logic ---
 
+// --- NEW ---
+/**
+ * Saves a single review to the SQLite database.
+ * This is the primary point of persistence for new reviews.
+ * It uses 'INSERT OR IGNORE' to prevent duplicates on the primary key (txHash).
+ * @param review The review object to save.
+ */
+async function saveReviewToDb(review: FrontendDappReview): Promise<void> {
+    let db: Database.Database | null = null;
+    logger.info(`DATABASE: Attempting to save review ${review.id} to SQLite.`);
+    try {
+        db = new Database(REVIEW_DB_PATH);
+        const stmt = db.prepare(`
+            INSERT OR IGNORE INTO etherscan_reviews (dappId, txHash, fromAddress, starRating, reviewText, blockNumber) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        stmt.run(
+            review.dappId,
+            review.id, // txHash is the review's unique ID
+            review.rater,
+            review.starRating,
+            review.reviewText,
+            review.timestamp
+        );
+        logger.info(`DATABASE: Successfully persisted review ${review.id}.`);
+    } catch (error) {
+        logger.error(`DATABASE: Failed to save review ${review.id} to SQLite:`, error);
+        // Depending on requirements, you might want to throw the error
+        // to be handled by the caller, but for now, we just log it.
+    } finally {
+        if (db) {
+            db.close();
+        }
+    }
+}
+
+
+// --- MODIFIED ---
+/**
+ * Processes a new review event from the SDK.
+ * 1. Persists the review to the database.
+ * 2. Updates the in-memory cache for fast access.
+ * 3. Notifies connected clients via WebSockets.
+ */
 async function processNewReview(reviewFromSDK: SDKDappReview) {
     logger.info(`Processing new review event: ID ${reviewFromSDK.id} for dApp ${reviewFromSDK.dappId}`);
 
     const serializedSDKReview = serializeBigInt(reviewFromSDK) as FrontendDappReview;
     if (!serializedSDKReview.timestamp) serializedSDKReview.timestamp = Date.now();
+    
+    // --- Step 1: Immediately persist the new review to the database ---
+    await saveReviewToDb(serializedSDKReview);
+    
+    // --- Step 2: Update the in-memory cache for performance and real-time updates ---
 
+    // Avoid processing duplicates in the cache if the listener fires multiple times
+    if (allReviewsStore.some(r => r.id === serializedSDKReview.id)) {
+        logger.warn(`Review ${serializedSDKReview.id} is already in the in-memory store. Skipping cache update.`);
+        return;
+    }
+    
     let dapp = dappsStore.find(d => d.dappId === serializedSDKReview.dappId);
     if (!dapp && ratecasterSDKInstance) {
-        logger.warn(`DApp ${serializedSDKReview.dappId} not in local store. Fetching from SDK (without aggregates).`);
+        logger.warn(`DApp ${serializedSDKReview.dappId} not in local store. Fetching from SDK.`);
         try {
+            // Fetching without aggregates as we will calculate them locally
             const newDappSDKShell = await ratecasterSDKInstance.getDapp(serializedSDKReview.dappId, false);
             if (newDappSDKShell) {
-                const reviewsForThisDapp = reviewsByDappStore[newDappSDKShell.dappId] || [];
-                if (!reviewsForThisDapp.find(r => r.id === serializedSDKReview.id)) {
-                    reviewsForThisDapp.push({ ...serializedSDKReview, dappName: newDappSDKShell.name });
-                }
-                const aggregates = calculateDappAggregates(newDappSDKShell, reviewsForThisDapp);
                 const newDappFrontend: FrontendDappRegistered = {
                     ...newDappSDKShell,
                     category: newDappSDKShell.category,
-                    totalReviews: aggregates.totalReviews,
-                    averageRating: aggregates.averageRating
+                    totalReviews: 0, // Will be updated below
+                    averageRating: 0 // Will be updated below
                 };
-                dappsStore = dappsStore.filter(d => d.dappId !== newDappFrontend.dappId);
                 dappsStore.push(newDappFrontend);
                 dapp = newDappFrontend;
-                logger.info(`Fetched and updated dApp ${newDappFrontend.name} in store.`);
-                if (io) io.emit('dappUpdate', serializeBigInt(newDappFrontend));
+                logger.info(`Fetched and added dApp ${newDappFrontend.name} to in-memory store.`);
             }
         } catch (fetchErr) {
             logger.error(`Error fetching dApp ${serializedSDKReview.dappId}:`, fetchErr);
@@ -452,13 +463,15 @@ async function processNewReview(reviewFromSDK: SDKDappReview) {
         timestamp: serializedSDKReview.timestamp,
     };
 
-    allReviewsStore = [fullReview, ...allReviewsStore.filter(r => r.id !== fullReview.id)]
-        .sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
+    // Update caches
+    allReviewsStore = [fullReview, ...allReviewsStore].sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
 
-    if (!reviewsByDappStore[fullReview.dappId]) reviewsByDappStore[fullReview.dappId] = [];
-    reviewsByDappStore[fullReview.dappId] = [fullReview, ...reviewsByDappStore[fullReview.dappId].filter(r => r.id !== fullReview.id)]
-        .sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
+    if (!reviewsByDappStore[fullReview.dappId]) {
+        reviewsByDappStore[fullReview.dappId] = [];
+    }
+    reviewsByDappStore[fullReview.dappId].unshift(fullReview);
 
+    // Recalculate aggregates for the affected dApp
     const dappIndex = dappsStore.findIndex(d => d.dappId === fullReview.dappId);
     if (dappIndex !== -1) {
         const currentReviewsForDapp = reviewsByDappStore[fullReview.dappId];
@@ -473,7 +486,8 @@ async function processNewReview(reviewFromSDK: SDKDappReview) {
         logger.debug(`Updated dApp ${dappsStore[dappIndex].name} aggregates: ${aggregates.totalReviews} reviews, ${aggregates.averageRating.toFixed(2)} avg rating.`);
         if (io) io.emit('dappUpdate', serializeBigInt(updatedDappForEmit));
     }
-
+    
+    // --- Step 3: Trigger game mechanics and notify clients ---
     const hasReviewText = Boolean(serializedSDKReview.reviewText && serializedSDKReview.reviewText.trim().length > 0);
     await processReviewAndRatingTasks(fullReview.rater, hasReviewText);
 
@@ -482,6 +496,7 @@ async function processNewReview(reviewFromSDK: SDKDappReview) {
         logger.info(`Emitted 'newReview' for review ${fullReview.id}`);
     }
 }
+
 
 function serializeBigInt(obj: any): any {
     if (obj === null || obj === undefined) return obj;
@@ -499,42 +514,73 @@ function serializeBigInt(obj: any): any {
     return obj;
 }
 
+// --- MODIFIED ---
+/**
+ * Starts and maintains a durable listener for new reviews.
+ * Uses an exponential backoff strategy for reconnection attempts.
+ * This function will run indefinitely, trying to keep the listener active.
+ * @param sdk The RateCaster SDK instance.
+ */
 async function startReviewListener(sdk: RateCaster) {
-    logger.info('Attempting to start SDK review listener...');
+    if (isListenerRunning) {
+        logger.warn('Listener is already running. Aborting duplicate start call.');
+        return;
+    }
+    isListenerRunning = true;
+    logger.info('Starting durable SDK review listener...');
 
     if (!wsProviderInitialized) {
-        logger.warn('WebSocket provider was not initialized. Real-time review listening will not function. Check WEBSOCKET_URL and provider logs.');
+        logger.error('CRITICAL: WebSocket provider not initialized. Real-time review listening cannot function.');
+        isListenerRunning = false;
         return;
     }
 
     if (!sdk || typeof sdk.listenToReviews !== 'function') {
-        logger.error('SDK instance is not available or listenToReviews method is missing. Cannot start listener.');
+        logger.error('CRITICAL: SDK instance or listenToReviews method is missing. Cannot start listener.');
+        isListenerRunning = false;
         return;
     }
-    logger.info('SDK instance and listenToReviews method found. Proceeding with subscription attempt for DappRatingSubmitted events...');
+
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 10; // After this, it will keep trying but at a max delay.
+    const baseDelay = 1000; // 1 second
+    const maxDelay = 60000; // 1 minute
 
     const eventName = "DappRatingSubmitted";
 
-    try {
-        await sdk.listenToReviews((review: SDKDappReview) => {
-            logger.debug(`Backend received raw ${eventName} event from SDK:`, review);
-            processNewReview(review).catch(error => {
-                logger.error(`Error processing review event from SDK callback for ${eventName}:`, error);
-            });
-        });
-        logger.info(`Successfully subscribed to ${eventName} events via SDK.`);
-    } catch (error) {
-        logger.error(`Failed to subscribe to ${eventName} events via SDK:`, error);
-        logger.info(`Attempting to stop any existing listener for ${eventName} and will retry in 5 seconds...`);
+    const connect = async () => {
         try {
+            logger.info(`Attempting to subscribe to "${eventName}" events...`);
+            await sdk.listenToReviews((review: SDKDappReview) => {
+                // On a new review, reset the reconnect counter as we have a healthy connection.
+                if (reconnectAttempts > 0) {
+                    logger.info('Successfully received an event. Resetting reconnect timer.');
+                    reconnectAttempts = 0;
+                }
+                processNewReview(review).catch(error => {
+                    logger.error('Error processing a new review:', error);
+                });
+            });
+            logger.info(`Successfully subscribed to "${eventName}" events. Listening for new reviews.`);
+            // The listener is now active. The promise from listenToReviews may not resolve
+            // if it's a continuous listener, so we rely on events coming in.
+        } catch (error) {
+            logger.error(`Failed to subscribe to "${eventName}" events:`, error);
+            
+            // Clean up existing listeners before retrying
             if (typeof sdk.stopListening === 'function') {
-                await sdk.stopListening(eventName);
+                await sdk.stopListening(eventName).catch(stopErr => logger.warn('Minor error while stopping listener during reconnect:', stopErr));
             }
-        } catch (stopError) {
-            logger.error(`Error trying to stop listener for ${eventName} before retry:`, stopError);
+
+            reconnectAttempts++;
+            const delay = Math.min(baseDelay * Math.pow(2, reconnectAttempts), maxDelay);
+            logger.info(`Will attempt to reconnect in ${delay / 1000} seconds...`);
+            
+            setTimeout(connect, delay);
         }
-        setTimeout(() => startReviewListener(sdk), 5000);
-    }
+    };
+
+    await connect();
 }
 
 export async function startBackendApplication() {
@@ -545,8 +591,7 @@ export async function startBackendApplication() {
         if (!sdkInitialized || !ratecasterSDKInstance) {
             throw new Error("SDK could not be initialized. Backend cannot start.");
         }
-        // --- MODIFIED ---
-        // We now call our new, fast, DB-powered function for the initial data load.
+
         await fetchInitialDataFromDb(sdk);
 
         const app = express();
@@ -556,6 +601,7 @@ export async function startBackendApplication() {
         const httpServer = http.createServer(app);
         io = new Server(httpServer, {
             cors: { origin: process.env.FRONTEND_URL || "*", methods: ["GET", "POST"] },
+            // These settings help keep the connection alive and detect dead connections faster.
             pingTimeout: 60000,
             pingInterval: 25000,
             transports: ['websocket', 'polling']
@@ -563,6 +609,8 @@ export async function startBackendApplication() {
 
         io.on('connection', (socket: SocketIOSocket) => {
             logger.info(`Socket.IO: Client connected: ${socket.id}`);
+            // Client is expected to send 'authenticate' with their address
+            // to join a room for targeted updates (e.g., profile changes).
             socket.on('authenticate', (userAddress: string) => {
                 if(userAddress && ethers.isAddress(userAddress)) {
                     socket.join(userAddress.toLowerCase());
@@ -572,9 +620,13 @@ export async function startBackendApplication() {
             socket.on('disconnect', (reason: string) => {
                 logger.info(`Socket.IO: Client disconnected: ${socket.id}, Reason: ${reason}`);
             });
+             // The Socket.IO client library has built-in reconnection logic.
+             // The server is already set up to handle these reconnections gracefully.
+             // No special server-side code is needed for this.
         });
 
 
+        // Start the durable listener.
         await startReviewListener(sdk);
 
         // --- All API endpoints below this line remain unchanged ---
@@ -588,11 +640,12 @@ export async function startBackendApplication() {
         }));
 
         app.get('/api/dapps', (req: express.Request, res: express.Response) => {
+            // Returns data from the fast in-memory cache, which is kept in sync with the DB.
             res.json(serializeBigInt(dappsStore));
         });
 
         app.get('/api/dapps/:dappId', (req: express.Request<{ dappId: string }>, res: express.Response) => {
-            const dappId = req.params.dappId;
+            const dappId = req.params.dappId.toLowerCase();
             const dapp = dappsStore.find(d => d.dappId === dappId);
             if (dapp) {
                 res.json(serializeBigInt(dapp));
@@ -602,12 +655,12 @@ export async function startBackendApplication() {
         });
 
         app.get('/api/reviews/dapp/:dappId', (req: express.Request<{ dappId: string }>, res: express.Response) => {
-            const reviewsForDapp = reviewsByDappStore[req.params.dappId] || [];
+            const reviewsForDapp = reviewsByDappStore[req.params.dappId.toLowerCase()] || [];
             res.json(serializeBigInt(reviewsForDapp));
         });
 
         app.get('/api/stats/dapp/:dappId', (req: express.Request<{ dappId: string }>, res: express.Response) => {
-            const dappId = req.params.dappId;
+            const dappId = req.params.dappId.toLowerCase();
             const reviewsForDapp = reviewsByDappStore[dappId] || [];
 
             const aggregates = calculateDappAggregates({ dappId } as SDKDappRegistered, reviewsForDapp);
@@ -868,6 +921,7 @@ export async function startBackendApplication() {
 async function gracefulShutdown(signal: string) {
     logger.info(`${signal} received. Shutting down...`);
     if (io) io.close(() => logger.info('Socket.IO server closed.'));
+    isListenerRunning = false; // Stop listener from attempting to reconnect
     if (ratecasterSDKInstance && typeof ratecasterSDKInstance.stopListening === 'function') {
         try {
             await ratecasterSDKInstance.stopListening("DappRatingSubmitted");

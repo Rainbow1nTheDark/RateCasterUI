@@ -1,9 +1,9 @@
 {
   "0xcb7437cad07230c488a118890494fbb545ddc7cb": {
     "address": "0xcb7437caD07230C488a118890494FBB545ddC7cB",
-    "points": 465,
+    "points": 535,
     "reviewStreak": 1,
-    "lastLoginTimestamp": 1751075037508,
+    "lastLoginTimestamp": 1753632616515,
     "lastReviewTimestamp": 1750381231480
   },
   "0x8f5505fd7f0149013eb45044dc1ffa956b3daf89": {
@@ -162,7 +162,7 @@
   },
   "0x22611b9e708f308b925fc589fe391b48b9d19360": {
     "address": "0x22611B9e708f308b925Fc589fe391b48b9d19360",
-    "points": 15,
+    "points": 30,
     "reviewStreak": 0,
     "lastLoginTimestamp": 0,
     "lastReviewTimestamp": 0
@@ -393,6 +393,167 @@
   },
   "0x5c43b7cfce5e62f7ae742fc113fa91f9483d48d9": {
     "address": "0x5c43B7cFCe5E62f7AE742FC113fa91f9483D48D9",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x20a336f8856bf5965451c231ff4ca775744f3ab6": {
+    "address": "0x20a336F8856bF5965451c231fF4ca775744F3aB6",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x5c0a529a975d50d456ec09888cafa7c84ee628b1": {
+    "address": "0x5C0A529a975d50d456Ec09888CAfA7c84Ee628b1",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0xc5bb16c0e27e3af1ecbe32d950ef7d2e6136b719": {
+    "address": "0xC5bB16C0E27e3AF1EcbE32D950EF7d2e6136b719",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x2a7520521da220cbb9c35b35fd8a8b700792931f": {
+    "address": "0x2a7520521DA220cBb9C35B35Fd8a8b700792931F",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x3356b0d8ab26ba7960b931176796c9cfcce3722d": {
+    "address": "0x3356B0d8AB26ba7960b931176796c9cFCCE3722D",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0xe3f84341a4337ba6ec91356ddabc5b760530041f": {
+    "address": "0xe3F84341a4337ba6Ec91356ddaBC5B760530041F",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0xf3cfbe00488da1958619b6fb42492bdb41b1e016": {
+    "address": "0xF3cFbe00488DA1958619B6FB42492BDb41b1e016",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x902cc0d696e2ac13d622310d6c3c65d5d8247219": {
+    "address": "0x902CC0D696E2ac13d622310d6C3c65D5D8247219",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x7489741e72a2ea52a166698ab5d47f253fccc228": {
+    "address": "0x7489741E72A2Ea52a166698AB5d47f253FcCc228",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x578134297e0d4f11fc6e7996e517602dadb61cf9": {
+    "address": "0x578134297E0d4f11Fc6e7996e517602DAdB61cF9",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x19937e9ef0af550fea14595f3b414b30de7954ba": {
+    "address": "0x19937E9ef0Af550fea14595F3b414b30DE7954bA",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0xdc9017b1308ce1723d4ef9905b641e47499ca4d2": {
+    "address": "0xDc9017b1308Ce1723D4eF9905b641E47499ca4d2",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0xcb452bea34f7ab5fa8ac15740d99f92306aafacb": {
+    "address": "0xCb452bEa34f7AB5fa8Ac15740d99F92306aAfACb",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x3e6994681d723e68b9a426c6b403d8375b509e23": {
+    "address": "0x3e6994681d723E68b9a426C6B403D8375b509e23",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x694ee158b10ef45714da268d1b5a37a2a5dc1209": {
+    "address": "0x694EE158b10Ef45714da268d1b5A37a2a5dc1209",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x632520523985f7a6881aebe29e3d94a17c5b8c85": {
+    "address": "0x632520523985F7A6881AEBE29E3d94a17c5b8C85",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x11c85773aa1220e1a53999b111585a8e8be5981c": {
+    "address": "0x11C85773aa1220e1a53999B111585a8E8be5981c",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x58c29b97878c75dad6c366b3a4c6fbc47beffd79": {
+    "address": "0x58c29b97878c75dAD6c366b3a4c6FbC47bEFfd79",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x32cb2791588280ad613b8029ce891ffcd73b0fc5": {
+    "address": "0x32cb2791588280AD613B8029cE891fFCD73B0Fc5",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x80a8314290a52ec763ccfe91d4f5f47cdc6ed7e3": {
+    "address": "0x80A8314290a52ec763ccFe91d4f5f47CDc6Ed7e3",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x5337b3df53b25beb8af7cd6dc2574ced8ac61b5e": {
+    "address": "0x5337b3dF53b25BEb8aF7Cd6dc2574CEd8Ac61B5E",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x0563231fa2eea4cdcdf27f1d6e86c087138baf88": {
+    "address": "0x0563231fa2eEa4CDcDF27F1d6e86C087138baf88",
+    "points": 15,
+    "reviewStreak": 0,
+    "lastLoginTimestamp": 0,
+    "lastReviewTimestamp": 0
+  },
+  "0x764e0887fc674bf04f0425204cfc8d996fca0e47": {
+    "address": "0x764e0887Fc674BF04f0425204CFC8d996fcA0E47",
     "points": 15,
     "reviewStreak": 0,
     "lastLoginTimestamp": 0,

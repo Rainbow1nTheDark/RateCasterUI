@@ -19,7 +19,7 @@ const StatusBar: React.FC<StatusBarProps> = ({ appStatus, userAddress, isLoading
     if (appStatus === 'Error' || appStatus === 'Error connecting wallet' || appStatus.startsWith('Error:')) {
       return <ExclamationCircleIcon className="w-5 h-5 text-red-500" />;
     }
-    if (appStatus === 'Ready' || appStatus.startsWith('Connected to') || appStatus === 'Services Connected.' || appStatus.startsWith('Wallet Connected')) {
+    if (appStatus === 'Ready' || appStatus.startsWith('Connected to') || appStatus.startsWith('Review submitted successfully!') || appStatus === 'Services Connected.' || appStatus.startsWith('Wallet Connected')) {
       return <CheckCircleIcon className="w-5 h-5 text-green-500" />;
     }
     return <Spinner size="sm" color="border-yellow-500" />;
