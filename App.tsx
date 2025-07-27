@@ -25,8 +25,8 @@ import { RobotIconV1 } from './components/icons/RobotIcon';
 import '@rainbow-me/rainbowkit/styles.css';
 import { polygon as wagmiPolygon } from 'viem/chains'; 
 
-const API_BASE_URL = 'http://localhost:3001/api';
-const SOCKET_SERVER_URL = 'http://localhost:3001';
+const API_BASE_URL = 'https://ratecaster.xyz/api';
+const SOCKET_SERVER_URL = 'https://ratecaster.xyz';
 const FRONTEND_RPC_URL = 'https://polygon-rpc.com'; 
 
 const queryClientTanstack = new QueryClient(); 
